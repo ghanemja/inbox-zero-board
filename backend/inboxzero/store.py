@@ -58,6 +58,17 @@ CREATE TABLE IF NOT EXISTS commitments (
   source_email  TEXT,
   created_at    TEXT
 );
+CREATE TABLE IF NOT EXISTS interactions (   -- temporal graph: one row per message
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  counterpart   TEXT,      -- canonical person
+  channel       TEXT,      -- email | slack | jira | cal
+  direction     TEXT,      -- in | out
+  ts            TEXT       -- ISO timestamp
+);
+CREATE TABLE IF NOT EXISTS identities (     -- unified identity across channels
+  alias         TEXT PRIMARY KEY,           -- gmail addr, slack handle, jira user...
+  canonical     TEXT
+);
 """
 
 
@@ -131,3 +142,23 @@ def list_commitments(conn, status="open"):
 
 def resolve_commitment(conn, cid: str):
     conn.execute("UPDATE commitments SET status='done' WHERE id=?", (cid,))
+
+
+def record_interaction(conn, counterpart: str, channel: str, direction: str, ts: str):
+    conn.execute(
+        "INSERT INTO interactions (counterpart, channel, direction, ts) VALUES (?,?,?,?)",
+        (counterpart, channel, direction, ts))
+
+
+def interactions_for(conn, counterpart: str):
+    return [dict(r) for r in conn.execute(
+        "SELECT * FROM interactions WHERE counterpart=? ORDER BY ts", (counterpart,))]
+
+
+def set_identity(conn, alias: str, canonical: str):
+    conn.execute("INSERT OR REPLACE INTO identities (alias, canonical) VALUES (?,?)", (alias, canonical))
+
+
+def resolve_identity(conn, addr: str) -> str:
+    row = conn.execute("SELECT canonical FROM identities WHERE alias=?", (addr,)).fetchone()
+    return row["canonical"] if row else addr

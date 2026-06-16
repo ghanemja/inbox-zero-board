@@ -16,7 +16,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from inboxzero import store, profiles, commitments  # noqa: E402
+from datetime import datetime, timezone  # noqa: E402
+
+from inboxzero import store, profiles, commitments, graph  # noqa: E402
 
 _FORMAL_SIGN = {"Best Regards", "Kind Regards", "Warm Regards", "Regards"}
 _FORMAL_GREET = {"Dear", "Hello", "Good Morning", "Good Afternoon"}
@@ -49,6 +51,7 @@ def export(db_path: str) -> dict:
                                  "status": ["proj", "new"], "miles": [["now", "triage"]],
                                  "tasks": [["o", r["task"] or "follow up"]], "emails": [r["subject"]]})
 
+        now = datetime.now(timezone.utc)
         idx = {}
         for cr in conn.execute("SELECT email_addr, profile FROM contacts"):
             p = json.loads(cr["profile"])
@@ -57,10 +60,13 @@ def export(db_path: str) -> dict:
             formality = 2 if (cs["greet"] in _FORMAL_GREET or cs["signoff"] in _FORMAL_SIGN) else 1
             init = _init(p.get("name") or cr["email_addr"])
             idx[cr["email_addr"]] = init
+            series = graph.weekly_series(conn, cr["email_addr"], now)
+            channels = sorted({it["channel"] for it in store.interactions_for(conn, cr["email_addr"])}) or [cs["channel"]]
             people.append({"n": p.get("name") or cr["email_addr"], "r": p.get("role", ""),
                            "team": "Inbox", "inf": 2 if tot >= 40 else 1 if tot >= 20 else 0,
                            "sent": p["counts"]["sent"], "recv": p["counts"]["recv"],
-                           "init": init, "channel": cs["channel"], "trend": "steady",
+                           "init": init, "channel": cs["channel"], "channels": channels,
+                           "series": series, "trend": graph.trend(series), "dormant": graph.dormant(series),
                            "domains": list(p.get("domains", {}).keys()),
                            "style": {"formality": formality, "len": cs["len"], "channel": cs["channel"],
                                      "greet": cs["greet"] or "Hi", "signoff": cs["signoff"] or "Thanks,",

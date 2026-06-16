@@ -6,7 +6,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from inboxzero import store, profiles, playbooks, gemma, commitments  # noqa: E402
+from datetime import datetime, timedelta, timezone  # noqa: E402
+
+from inboxzero import store, profiles, playbooks, gemma, commitments, graph  # noqa: E402
 
 ME = "you@acme.com"
 DB = "test_learning.db"
@@ -104,6 +106,32 @@ def main():
         assert owe["party"] == "you", "inbound request → you owe them"
         assert owed["party"] == "them", "your outbound ask → they owe you"
         assert commitments.sla(None, overdue_days=4)[0] == "red"
+
+        # --- temporal graph: trend computed from time-bucketed interactions ---
+        now = datetime(2026, 6, 16, tzinfo=timezone.utc)
+        rising = "grow@acme.com"
+        for wk, cnt in enumerate([1, 1, 2, 3, 5, 8, 11, 14]):       # ramping up
+            for _ in range(cnt):
+                ts = (now - timedelta(weeks=8) + timedelta(weeks=wk, hours=1)).isoformat()
+                store.record_interaction(conn, rising, "slack", "out", ts)
+        series = graph.weekly_series(conn, rising, now)
+        print("\nWeekly series for grow@acme:", series, "→ trend:", graph.trend(series))
+        assert graph.trend(series) == "rising", "ramping interactions → rising"
+
+        # --- unified identity: slack alias collapses to canonical ---
+        store.set_identity(conn, "grow-slack", rising)
+        assert store.resolve_identity(conn, "grow-slack") == rising, "alias resolves to canonical"
+
+        # --- bus-factor: Fran is the sole owner of 'room booking' (taught above) ---
+        bf = {r["domain"] for r in graph.bus_factor(conn)}
+        print("Bus-factor domains:", bf)
+        assert "room booking" in bf, "single-owner domain flagged as bus-factor"
+
+        # --- health signals are behavioral only (no emotion/character) ---
+        sig = graph.health_signals(conn, ME, now)
+        kinds = {s["kind"] for s in sig}
+        print("Health signal kinds:", kinds)
+        assert kinds <= {"commitment", "dormant", "reciprocity", "bus_factor"}, "behavioral kinds only"
 
     os.remove(DB)
     print("\nAll learning assertions passed ✓")

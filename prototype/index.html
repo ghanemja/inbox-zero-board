@@ -223,6 +223,28 @@
   .tr-rising{background:var(--proj-bg);color:var(--proj-ink)} .tr-fading{background:var(--red-bg);color:var(--red)}
   .tr-new{background:#eeedfe;color:#3c3489} .tr-steady{background:var(--surface2);color:var(--ink2)}
 
+  /* channel filter + relationship health */
+  .chanfilter{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+  .chanfilter button{font-size:11px;padding:4px 11px;border-radius:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink2);cursor:pointer}
+  .chanfilter button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .optin{font-size:11px;color:var(--ink2);margin-left:auto;display:flex;align-items:center;gap:5px;cursor:pointer}
+  .optin input{width:14px;height:14px;accent-color:var(--accent)}
+  .health-row{display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+  .health-row:last-child{border-bottom:0}
+  .health-row .hi{width:8px;height:8px;border-radius:50%;margin-top:6px;flex-shrink:0}
+  .health-empty{font-size:12px;color:var(--ink3);padding:12px 0;text-align:center}
+
+  /* commitments controls */
+  .cfilter{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+  .cfilter button{font-size:12px;padding:5px 11px;border-radius:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink2);cursor:pointer}
+  .cfilter button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .commit.done{opacity:.5}
+  .commit.done .ct{text-decoration:line-through}
+  .cact{display:flex;gap:8px;margin-top:9px;align-items:center}
+  .cact button{font-size:11px;padding:5px 11px;border-radius:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+  .cact button.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+  .cact .src{font-size:11px;color:var(--ink3);margin-left:auto;cursor:pointer}
+
   .hidden{display:none}
   footer{color:var(--ink3);font-size:11px;text-align:center;padding:18px}
 
@@ -292,8 +314,9 @@
 
   <!-- COMMITMENTS (chief of staff) -->
   <section id="view-commit" class="hidden">
-    <div class="reason"><span class="o">⬡</span><span>Every promise, across every channel — not just email. <b>They owe you</b> vs <b>you owe them</b>, with SLA timers. The engine reads commitments out of threads so nothing silently slips. Nudge in one click.</span></div>
+    <div class="reason"><span class="o">⬡</span><span>Every promise, across every channel — not just email. <b>They owe you</b> vs <b>you owe them</b>, with SLA timers. The engine reads commitments out of threads so nothing silently slips. Resolve, snooze, or nudge — one click.</span></div>
     <div class="stats" id="commit-stats"></div>
+    <div class="cfilter" id="commit-filter"></div>
     <div class="commit-grid">
       <div><h2 class="ctitle"><span class="k" style="background:var(--proj)"></span>They owe you <span class="c">waiting on a reply / deliverable</span></h2><div id="commit-them"></div></div>
       <div><h2 class="ctitle"><span class="k" style="background:var(--todo)"></span>You owe them <span class="c">your move</span></h2><div id="commit-you"></div></div>
@@ -328,7 +351,8 @@
     <div class="ins-grid">
       <div class="panel">
         <h3>Communication network</h3>
-        <div class="sub">Drag nodes. Tap one to inspect.</div>
+        <div class="sub">One graph across every channel. Drag nodes, tap to inspect.</div>
+        <div class="chanfilter" id="chanfilter"></div>
         <svg id="graph" viewBox="0 0 640 360" preserveAspectRatio="xMidYMid meet"></svg>
         <div class="legend">
           <span><i style="background:#d85a30"></i>high influence</span>
@@ -343,7 +367,13 @@
       <div>
         <div class="panel" style="margin-bottom:16px"><h3>Top people</h3><div class="sub">By two-way volume this quarter</div><div id="people"></div></div>
         <div class="panel" style="margin-bottom:16px"><h3>What you talk about</h3><div class="sub">Topic share of active threads</div><div id="topics"></div></div>
-        <div class="panel"><h3>Things worth knowing</h3><div id="insights"></div></div>
+        <div class="panel" style="margin-bottom:16px"><h3>Things worth knowing</h3><div id="insights"></div></div>
+        <div class="panel">
+          <div style="display:flex;align-items:center;gap:8px"><h3 style="margin:0">Relationship health</h3>
+            <label class="optin"><input type="checkbox" id="health-opt" onchange="renderHealth()" /> opt-in</label></div>
+          <div class="sub">Behavioral only — reply latency, reciprocity, silence, aging commitments. Never emotional-state or character. Local + off by default.</div>
+          <div id="health"></div>
+        </div>
       </div>
     </div>
   </section>
@@ -398,9 +428,39 @@ const people=[
   {n:'M. Chen',r:'New hire',team:'Eng',inf:0,sent:6,recv:9,init:'MC',domains:['onboarding'],channel:'slack',trend:'new',
    style:{formality:1,len:'med',channel:'Slack',cadence:'~1 hr',greet:'Hi there',signoff:'Thank you!',emoji:true}},
 ];
+/* compounding-graph: per-person interaction history (last 8 weeks) + channels they span.
+   `series` = weekly two-way message counts; trend is COMPUTED from it (recent vs prior). */
+const history={
+  SK:{channels:['email','jira'],     series:[9,8,10,7,6,5,4,3]},   // fading
+  DN:{channels:['slack','email','cal'],series:[6,7,9,11,12,14,16,18]}, // rising
+  LO:{channels:['slack','jira'],     series:[7,8,7,8,7,8,7,8]},     // steady
+  FM:{channels:['email','cal'],      series:[5,6,5,6,5,6,5,6]},     // steady
+  RC:{channels:['email'],            series:[8,7,6,4,3,2,1,1]},     // fading + dormant
+  TK:{channels:['email','cal','slack'],series:[6,5,6,6,5,6,6,6]},  // steady
+  MC:{channels:['slack'],            series:[0,0,0,0,0,2,5,9]},     // new
+};
+function trendOf(series){
+  const recent=series.slice(-3).reduce((a,b)=>a+b,0), prior=series.slice(-6,-3).reduce((a,b)=>a+b,0);
+  if(series.slice(0,-3).every(v=>v===0)&&recent>0) return 'new';
+  if(recent>=prior*1.4) return 'rising';
+  if(recent<=prior*0.6) return 'fading';
+  return 'steady';
+}
+function dormant(series){return series.slice(-2).reduce((a,b)=>a+b,0)<=2 && series.slice(0,4).some(v=>v>=5);}
+people.forEach(p=>{const h=history[p.init];if(h){p.channels=h.channels;p.series=h.series;p.trend=trendOf(h.series);p.dormant=dormant(h.series);}
+  else{p.channels=p.channels||[p.channel||'email'];p.series=p.series||[];}});
+
 let peopleByInit;
 function rebuildPeople(){peopleByInit=Object.fromEntries(people.map(p=>[p.init,p]));}
 rebuildPeople();
+
+/* bottleneck + bus-factor: who is the sole owner of a domain (single point of failure) */
+function busFactorRisks(){
+  const owners={};  // domain -> [people]
+  people.forEach(p=>(p.domains||[]).forEach(d=>{(owners[d]=owners[d]||[]).push(p);}));
+  return Object.entries(owners).filter(([,ppl])=>ppl.length===1)
+    .map(([d,ppl])=>({domain:d,who:ppl[0]})).filter(r=>r.who.inf>=1);
+}
 
 /* ---------- board data (owner + team for exec→IC rollup) ---------- */
 const todos=[
@@ -609,22 +669,50 @@ function renderSources(){
 }
 
 /* commitments (chief of staff) */
+let commitFilter='open';
+function commitMatch(c){
+  if(commitFilter==='open')return c.status!=='done';
+  if(commitFilter==='overdue')return c.status!=='done'&&c.cls==='overdue';
+  if(commitFilter==='done')return c.status==='done';
+  return c.status!=='done'&&c.chan===commitFilter;   // a channel name
+}
+function setCommitFilter(f){commitFilter=f;renderCommit();}
+function commitAct(id,act){
+  const c=commitments.find(x=>x.id===id);if(!c)return;
+  if(act==='done')c.status='done';
+  if(act==='snooze'){c.cls='';c.sla=['ok','snoozed 3d'];}
+  if(act==='nudge'){c.nudged=true;}
+  renderCommit();
+}
 function renderCommit(){
-  const them=commitments.filter(c=>c.party==='them'), you=commitments.filter(c=>c.party==='you');
-  const over=commitments.filter(c=>c.cls==='overdue').length;
+  const open=commitments.filter(c=>c.status!=='done');
+  const over=open.filter(c=>c.cls==='overdue').length;
   document.getElementById('commit-stats').innerHTML=[
-    ['They owe you',them.length,'var(--proj-ink)'],['You owe them',you.length,'var(--todo-ink)'],
-    ['Overdue',over,'var(--red)'],['Across channels',new Set(commitments.map(c=>c.chan)).size,'var(--ink)'],
+    ['They owe you',open.filter(c=>c.party==='them').length,'var(--proj-ink)'],
+    ['You owe them',open.filter(c=>c.party==='you').length,'var(--todo-ink)'],
+    ['Overdue',over,'var(--red)'],['Across channels',new Set(open.map(c=>c.chan)).size,'var(--ink)'],
   ].map(s=>`<div class="stat"><div class="l">${s[0]}</div><div class="n" style="color:${s[2]}">${s[1]}</div></div>`).join('');
-  const row=c=>{const p=peopleByInit[c.who];const nm=p?p.n:c.who;
-    return `<div class="commit ${c.cls}">
+  const chans=[...new Set(commitments.map(c=>c.chan))];
+  const fbtn=(f,lbl)=>`<button class="${commitFilter===f?'on':''}" onclick="setCommitFilter('${f}')">${lbl}</button>`;
+  document.getElementById('commit-filter').innerHTML=
+    '<span style="font-size:12px;color:var(--ink2)">Filter</span>'+fbtn('open','open')+fbtn('overdue','overdue')+
+    chans.map(c=>fbtn(c,CHAN[c]||c)).join('')+fbtn('done','resolved');
+  const row=c=>{const p=peopleByInit[c.who],nm=p?p.n:c.who, done=c.status==='done';
+    return `<div class="commit ${done?'done':c.cls}">
       <div class="ct">${c.what}</div>
       <div class="cm">${av(c.who,'s')}<span class="meta">${nm}</span>${chanChip(c.chan)}
-        <span class="meta">· ${c.ctx}</span><span class="sla ${c.sla[0]}">${c.sla[1]}</span></div>
-      <button class="nudge" onclick="this.textContent='Nudge sent ✓';this.classList.add('sent')">${c.party==='them'?'Send nudge':'Draft my reply'}</button>
+        <span class="meta">· ${c.ctx}</span><span class="sla ${done?'ok':c.sla[0]}">${done?'resolved':c.sla[1]}</span></div>
+      ${done?'':`<div class="cact">
+        <button class="pri" onclick="commitAct('${c.id}','nudge')">${c.nudged?'✓ '+(c.party==='them'?'nudged':'drafted'):(c.party==='them'?'Send nudge':'Draft reply')}</button>
+        <button onclick="commitAct('${c.id}','snooze')">Snooze 3d</button>
+        <button onclick="commitAct('${c.id}','done')">Resolve</button>
+        <span class="src" onclick="alert('Opens the source ${c.chan} thread (prototype)')">view source ↗</span>
+      </div>`}
     </div>`;};
-  document.getElementById('commit-them').innerHTML=them.map(row).join('');
-  document.getElementById('commit-you').innerHTML=you.map(row).join('');
+  const them=open.length||commitFilter==='done'?commitments.filter(c=>c.party==='them'&&commitMatch(c)):[];
+  const you=commitments.filter(c=>c.party==='you'&&commitMatch(c));
+  document.getElementById('commit-them').innerHTML=them.map(row).join('')||'<div class="health-empty">Nothing here</div>';
+  document.getElementById('commit-you').innerHTML=you.map(row).join('')||'<div class="health-empty">Nothing here</div>';
 }
 
 /* ---------- awareness actions ---------- */
@@ -741,21 +829,53 @@ function renderIns(){
      <div class="tb"><div style="width:${t.pct*3}%;height:100%;background:${t.c}"></div></div></div>`).join('');
   document.getElementById('insights').innerHTML=insights.map(i=>`<div class="insrow"><div class="ic" style="background:${i[0]};color:${i[1]}">${i[2]}</div><div>${i[3]}</div></div>`).join('');
 }
+/* relationship health — BEHAVIORAL ONLY, opt-in, local. No emotional-state/character signals.
+   Allowed: reply latency, reciprocity, silence, aging commitments, bus-factor. */
+function renderHealth(){
+  const on=document.getElementById('health-opt')?.checked;
+  const box=document.getElementById('health');if(!box)return;
+  if(!on){box.innerHTML='<div class="health-empty">Off. Enable for behavioral relationship signals — computed locally, never stored or shared.</div>';return;}
+  const rows=[];
+  commitments.filter(c=>c.cls==='overdue').forEach(c=>{const p=peopleByInit[c.who],nm=p?p.n:c.who;
+    rows.push(['#e24b4a', c.party==='them'?`Still waiting on ${nm}: "${c.what}" — ${c.sla[1]}. Nudge or drop it.`:`You're behind with ${nm}: "${c.what}" — ${c.sla[1]}.`]);});
+  people.filter(p=>p.dormant&&p.inf>=1).forEach(p=>rows.push(['#b07012',`${p.n} has gone quiet (8-week low) but was a key contact — worth a check-in.`]));
+  busFactorRisks().filter(r=>r.who.trend==='fading').forEach(r=>rows.push(['#b07012',`${r.who.n} is sole owner of "${r.domain}" and trending down — single point of failure.`]));
+  people.forEach(p=>{const r=p.sent/(p.recv||1);if(p.inf>=1&&(r>1.8||r<0.55))
+    rows.push(['#185fa5', r>1.8?`You send ${p.n} more than they reply (${p.sent}↑ ${p.recv}↓).`:`${p.n} reaches out more than you reply (${p.sent}↑ ${p.recv}↓).`]);});
+  box.innerHTML=rows.length?rows.map(r=>`<div class="health-row"><span class="hi" style="background:${r[0]}"></span><div>${r[1]}</div></div>`).join('')
+    :'<div class="health-empty">No signals right now — you\'re on top of things.</div>';
+}
 const LENMAP={short:1,med:2,long:3};
 function bars(v,max){let h='';for(let i=1;i<=max;i++)h+=`<i class="${i<=v?'on':''}"></i>`;return `<span class="stylebars">${h}</span>`;}
+function spark(series,col){
+  if(!series||!series.length)return '';
+  const max=Math.max(1,...series), w=132,h=30,step=w/(series.length-1);
+  const pts=series.map((v,i)=>`${(i*step).toFixed(1)},${(h-(v/max)*(h-3)-1).toFixed(1)}`).join(' ');
+  return `<svg width="${w}" height="${h}" style="display:block"><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round"/></svg>`;
+}
+const TRENDCOL={rising:'#1d9e75',fading:'#e24b4a',new:'#7f77dd',steady:'#888780'};
 function showNode(n){
   const box=document.getElementById('nodeinfo');
   if(n.inf==='you'){box.innerHTML='<b style="color:var(--ink)">You</b> — center of the network. Everything routes through here.';return;}
   const p=peopleByInit[n.id];if(!p)return;
   const st=p.style||{}, first=p.n.split(' ')[0];
   const sample=`${st.greet||'Hi'} ${first} — quick one on ${(p.domains[0]||'this')}. ${st.signoff||'Thanks,'}`;
+  const sole=busFactorRisks().filter(r=>r.who.init===p.init).map(r=>r.domain);
+  const flags=[];
+  if(p.dormant)flags.push(`<span class="trend tr-fading">dormant — was active</span>`);
+  if(sole.length)flags.push(`<span class="trend" style="background:var(--amber-bg);color:var(--amber-ink)">sole owner: ${sole.join(', ')}</span>`);
   box.innerHTML=`<div style="display:flex;align-items:center;gap:9px;margin-bottom:8px">${av(p.init,'m')}<b style="color:var(--ink)">${p.n}</b><span style="color:var(--ink3)">· ${p.r}</span>
       <span class="trend tr-${p.trend}" style="margin-left:auto">${p.trend}</span></div>
     <div style="margin-bottom:7px">Handles: ${p.domains.map(d=>`<span class="dchip" onclick="seedTicket('${d}')">${d}${domainRoute[d]?' ↗':''}</span>`).join('')}</div>
-    <div style="font-size:12px">${p.sent}↑ ${p.recv}↓ · best on ${chanChip(p.channel)} · replies ${st.cadence||'—'}</div>
+    <div style="font-size:12px;margin-bottom:8px">Spans: ${(p.channels||[]).map(c=>chanChip(c)).join(' ')} · replies ${st.cadence||'—'}</div>
+    ${flags.length?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px">${flags.join('')}</div>`:''}
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <div style="flex:1"><div style="font-size:11px;color:var(--ink3);margin-bottom:2px">Interaction · last 8 weeks</div>${spark(p.series,TRENDCOL[p.trend])}</div>
+      <div style="text-align:right"><div style="font-size:18px;font-weight:600">${p.sent+p.recv}</div><div style="font-size:10px;color:var(--ink2)">${p.sent}↑ ${p.recv}↓</div></div>
+    </div>
     <div class="style">
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink3);font-weight:600;margin-bottom:6px">How you talk to ${first}</div>
-      <div class="row"><span class="k">Formality</span>${bars(st.formality+1||1,3)}</div>
+      <div class="row"><span class="k">Formality</span>${bars((st.formality||0)+1,3)}</div>
       <div class="row"><span class="k">Message length</span>${bars(LENMAP[st.len]||2,3)}</div>
       <div class="row"><span class="k">Greeting / sign-off</span><span>"${st.greet}" … "${st.signoff}"</span></div>
       <div class="row"><span class="k">Emoji</span><span>${st.emoji?'yes':'no'}</span></div>
@@ -776,7 +896,16 @@ function seedTicket(domain){
 }
 
 /* ---------- graph (vanilla force layout) ---------- */
-const W=640,H=360; let nodes=[],links=[],dragNode=null,raf=null;
+const W=640,H=360; let nodes=[],links=[],dragNode=null,raf=null,channelFilter=null;
+const CHANCOL={email:'#185fa5',slack:'#534ab7',jira:'#0f6e56',cal:'#b07012'};
+function renderChanFilter(){
+  const chans=[...new Set(people.flatMap(p=>p.channels||[]))];
+  document.getElementById('chanfilter').innerHTML=
+    `<button class="${channelFilter===null?'on':''}" onclick="setChan(null)">all channels</button>`+
+    chans.map(c=>`<button class="${channelFilter===c?'on':''}" onclick="setChan('${c}')">${CHAN[c]||c}</button>`).join('');
+}
+function setChan(c){channelFilter=c;renderChanFilter();}
+function onChan(id){const p=peopleByInit[id];return !channelFilter||id==='you'||(p&&(p.channels||[]).includes(channelFilter));}
 function initGraph(){
   nodes=[{id:'you',label:'You',inf:'you',r:24,x:W/2,y:H/2,vx:0,vy:0}];
   people.forEach((p,i)=>{const a=(i/people.length)*Math.PI*2;
@@ -798,11 +927,15 @@ function tick(){
 }
 function draw(){
   let s='';
-  links.forEach(l=>{const a=nodes[l.s],b=nodes[l.t];s+=`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="var(--line)" stroke-width="${Math.max(1,l.w/12)}"/>`;});
+  links.forEach(l=>{const a=nodes[l.s],b=nodes[l.t];
+    const lit=onChan(a.id)&&onChan(b.id);
+    // when filtering, color the edge by the active channel; else neutral
+    const col=channelFilter?CHANCOL[channelFilter]:'var(--line)';
+    s+=`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${col}" stroke-width="${Math.max(1,l.w/12)}" opacity="${lit?(channelFilter?.55:1):.12}"/>`;});
   const TREND={rising:'#1d9e75',fading:'#e24b4a',new:'#7f77dd'};
   nodes.forEach((n,i)=>{const col=n.inf==='you'?'#534ab7':infColor(n.inf);
-    const tr=peopleByInit[n.id]?.trend, ring=TREND[tr];
-    s+=`<g data-i="${i}" style="cursor:grab">${ring?`<circle cx="${n.x}" cy="${n.y}" r="${n.r+3.5}" fill="none" stroke="${ring}" stroke-width="2" stroke-dasharray="${tr==='new'?'3 3':'0'}"/>`:''}
+    const tr=peopleByInit[n.id]?.trend, ring=TREND[tr], lit=onChan(n.id);
+    s+=`<g data-i="${i}" style="cursor:grab" opacity="${lit?1:.2}">${ring&&lit?`<circle cx="${n.x}" cy="${n.y}" r="${n.r+3.5}" fill="none" stroke="${ring}" stroke-width="2" stroke-dasharray="${tr==='new'?'3 3':'0'}"/>`:''}
       <circle cx="${n.x}" cy="${n.y}" r="${n.r}" fill="${col}" opacity="${n.inf==='you'?1:.92}"/>
       <text x="${n.x}" y="${n.y+n.r+13}" text-anchor="middle" font-size="11" fill="var(--ink2)">${n.label}</text></g>`;});
   document.getElementById('graph').innerHTML=s;
@@ -826,7 +959,7 @@ function show(v){
   if(v==='commit')renderCommit();
   if(v==='org')renderOrg();
   if(v==='delegate'){renderSuggest();if(!document.getElementById('delegate-out').innerHTML)runTicket();}
-  if(v==='ins'){renderIns();if(!graphStarted){graphStarted=true;initGraph();bindGraph();tick();}}
+  if(v==='ins'){renderIns();renderChanFilter();renderHealth();if(!graphStarted){graphStarted=true;initGraph();bindGraph();tick();}}
 }
 
 /* ---------- optional: load real backend export, else use built-in demo seed ---------- */

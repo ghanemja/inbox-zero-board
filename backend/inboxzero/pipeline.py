@@ -24,6 +24,17 @@ def run(me: str, source: str = "db", limit: int = 100, use_gemma: bool = True):
             store.save_classification(conn, result)
             profiles.observe(conn, e, me, result)
             commitments.ingest(conn, e, me)   # chief-of-staff: who owes whom
+            _record_interaction(conn, e, me)  # compounding graph: temporal edge
             counts[result["board"]] = counts.get(result["board"], 0) + 1
 
     return counts
+
+
+def _record_interaction(conn, e: dict, me: str):
+    from_me = e.get("from_addr", "").lower() == me.lower()
+    other = (e["to_addrs"][0] if e.get("to_addrs") else None) if from_me else e.get("from_addr")
+    if not other:
+        return
+    canonical = store.resolve_identity(conn, other)   # collapse cross-channel aliases
+    store.record_interaction(conn, canonical, e.get("channel", "email"),
+                             "out" if from_me else "in", e.get("received", ""))

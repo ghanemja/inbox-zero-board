@@ -152,3 +152,20 @@ Read promises/requests out of each message and track who owes whom — across ev
 - **Signals** (from_me only): greeting, sign-off, message length, emoji rate, preferred channel, response cadence (turnaround samples).
 - **Fingerprint.** `comm_style(profile)` summarizes → `{greet, signoff, len, emoji, channel, avg_words}`. Drafts + nudges mirror it, so an ask to a formal contact reads formal, a Slack-native one reads casual.
 - **Why it's a moat.** This is per-relationship, accumulates with use, and is invisible to a generic assistant — part of the graph that can't be lifted out.
+
+---
+
+## 10. Compounding org-graph: temporal, identity, bus-factor, health (`graph.py`)
+
+- **Unified identity.** `identities` table maps each alias (Gmail addr, Slack handle, Jira user) to one canonical person, so the same human collapses to a single node before any metric runs. `resolve_identity()` is applied at ingest.
+- **Temporal graph.** Every message writes an `interactions` row (counterpart, channel, direction, ts). `weekly_series()` buckets the trailing 8 weeks; `trend()` derives rising / fading / new / steady from recent-vs-prior; `dormant()` flags was-active-now-quiet. The graph evolves — ties form and fade — instead of being a static snapshot.
+- **Cross-silo.** Channel is carried on every interaction, so one graph spans email + Slack + Jira + calendar; the UI can filter the network by channel and show which channels each tie spans.
+- **Bus-factor.** `bus_factor()` surfaces domains owned by exactly one person — org resilience risk, not a person judgement.
+
+### Relationship-health ethics rule (hard constraint)
+
+Health signals are **opt-in, local, behavioral, and self-directed**. Enforced in `graph.py`:
+
+- **Allowed:** message counts, timing/latency, reciprocity ratios, silence, commitment aging, domain ownership — all metadata-derivable.
+- **Forbidden:** sentiment/emotion/tone-affect scoring of a person, "engagement"/"mood" labels, anything usable to surveil a report, and persisting any psychological judgement about an individual.
+- Signals are never exported as scores and are framed as logistics ("thread idle with an open commitment"), never character ("seems disengaged"). Off by default.
