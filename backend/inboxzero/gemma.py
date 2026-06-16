@@ -6,9 +6,8 @@ No data leaves the machine — Ollama is a local server. See docs/learning-logic
 from __future__ import annotations
 
 import json
-import requests
 
-from config import OLLAMA_HOST, GEMMA_MODEL
+from config import OLLAMA_HOST, GEMMA_MODEL, EMBED_MODEL
 
 # Ollama supports a JSON schema in `format` to constrain decoding.
 CLASSIFY_SCHEMA = {
@@ -49,6 +48,7 @@ BODY:
 
 
 def classify(email: dict, me: str) -> dict:
+    import requests
     prompt = PROMPT.format(
         me=me, frm=email.get("from_addr", ""),
         to=", ".join(email.get("to_addrs", [])), cc=", ".join(email.get("cc_addrs", [])),
@@ -71,3 +71,20 @@ def classify(email: dict, me: str) -> dict:
     data["layer"] = "gemma"
     data["project_key"] = None  # set later by playbooks clustering
     return data
+
+
+def embed(text: str) -> list[float] | None:
+    """Local embedding (nomic-embed-text via Ollama) for fuzzy playbook matching.
+    Returns None if the model/server is unavailable — callers fall back to exact match."""
+    try:
+        import requests
+        resp = requests.post(
+            f"{OLLAMA_HOST}/api/embeddings",
+            json={"model": EMBED_MODEL, "prompt": text},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        vec = resp.json().get("embedding")
+        return vec if vec else None
+    except Exception:
+        return None

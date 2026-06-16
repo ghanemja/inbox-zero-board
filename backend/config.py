@@ -13,6 +13,8 @@ GRAPH_SCOPES = ["Mail.Read"]  # read-only by design
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 GEMMA_MODEL = os.getenv("GEMMA_MODEL", "gemma3:4b")
+EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text")
 
 CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.6"))
+PLAYBOOK_MATCH_THRESHOLD = float(os.getenv("PLAYBOOK_MATCH_THRESHOLD", "0.75"))
 DB_PATH = os.getenv("DB_PATH", "inboxzero.db")

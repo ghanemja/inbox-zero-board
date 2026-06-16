@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from inboxzero import store, profiles, playbooks  # noqa: E402
+from inboxzero import store, profiles, playbooks, gemma  # noqa: E402
 
 ME = "you@acme.com"
 DB = "test_learning.db"
@@ -67,6 +67,16 @@ def main():
         assert "One-off favor" not in tasks, "one-off (1 event) should be generalized out"
         room = next(s for s in plan["subtasks"] if s["task"] == "Reserve a room")
         assert room["contact"] == "fran@acme.com", "room should route to Fran via domain ownership"
+
+        # --- fuzzy playbook match via embeddings (monkeypatched embedder, no Ollama) ---
+        gemma.embed = lambda t: [1.0, 0.0] if "sponsor" in t.lower() else [0.0, 1.0]
+        playbooks.learn_from_sent_batch(conn, "sponsor meeting", ev2)  # re-learn → stores centroid
+        fuzzy = playbooks.replay(conn, "Set up a sponsor gathering",  # NOT an exact key match
+                                 {"headcount": 12}, ME)
+        print("\nFuzzy match 'Set up a sponsor gathering' →",
+              "matched playbook" if fuzzy else "no match")
+        assert fuzzy is not None, "embedding NN should match the sponsor playbook despite different wording"
+        assert "Order catering" in {s["task"] for s in fuzzy["subtasks"]}
 
     os.remove(DB)
     print("\nAll learning assertions passed ✓")

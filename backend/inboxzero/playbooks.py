@@ -11,8 +11,10 @@ embedding-based fuzzy matching is left as a clearly-marked hook.
 from __future__ import annotations
 
 import json
+import math
 
-from . import store, profiles
+from . import store, profiles, gemma
+from config import PLAYBOOK_MATCH_THRESHOLD
 
 MIN_EVENTS_FOR_CANONICAL = 2
 
@@ -30,6 +32,8 @@ def learn_from_sent_batch(conn, goal: str, sent_subtasks: list[dict]):
     spec["events"].append(sent_subtasks)
     spec["support"] = len(spec["events"])
     spec["subtasks"] = _generalize(spec["events"])
+    # store a centroid embedding of the goal text for fuzzy matching (None if no embedder)
+    spec["embedding"] = gemma.embed(spec.get("learned") or key)
 
     conn.execute("INSERT OR REPLACE INTO playbooks (goal, spec) VALUES (?,?)",
                  (key, json.dumps(spec)))
@@ -77,14 +81,33 @@ def replay(conn, goal_text: str, ticket_slots: dict, me: str) -> dict | None:
             "support": spec.get("support", 0), "subtasks": out}
 
 
+def _cosine(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    return dot / (na * nb) if na and nb else 0.0
+
+
 def _match(conn, goal_text: str) -> dict | None:
+    # 1) exact / normalized key match (free, deterministic)
     row = conn.execute("SELECT spec FROM playbooks WHERE goal=?", (_key(goal_text),)).fetchone()
     if row:
         return json.loads(row["spec"])
-    # OPTIONAL HOOK: embed goal_text (local nomic-embed via Ollama), nearest-neighbor
-    #   against stored playbook centroids; return if cosine >= threshold. Skipped here
-    #   to keep the core dependency-free; exact + normalized match covers the common case.
-    return None
+    # 2) fuzzy: embed the query, nearest-neighbor against stored playbook centroids.
+    #    Degrades gracefully — if no embedder, qv is None and we return no match.
+    qv = gemma.embed(goal_text)
+    if not qv:
+        return None
+    best, best_sim = None, 0.0
+    for r in conn.execute("SELECT spec FROM playbooks"):
+        spec = json.loads(r["spec"])
+        ev = spec.get("embedding")
+        if not ev:
+            continue
+        sim = _cosine(qv, ev)
+        if sim > best_sim:
+            best, best_sim = spec, sim
+    return best if best_sim >= PLAYBOOK_MATCH_THRESHOLD else None
 
 
 def _best_contact_for(conn, domain: str) -> str | None:
