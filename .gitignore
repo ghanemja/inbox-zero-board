@@ -1,0 +1,8 @@
+# local artifacts — never commit
+*.db
+__pycache__/
+*.pyc
+.venv/
+.env
+.DS_Store
+prototype/data.json

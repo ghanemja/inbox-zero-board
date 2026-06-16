@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Inbox Zero Board — prototype</title>
+<style>
+  :root{
+    --bg:#f5f4ef; --surface:#ffffff; --surface2:#faf9f5; --line:#e3e1d8;
+    --ink:#26251f; --ink2:#6b6a62; --ink3:#9a988e;
+    --todo:#d85a30; --todo-bg:#faece7; --todo-ink:#993c1d;
+    --aware:#185fa5; --aware-bg:#e6f1fb; --aware-ink:#0c447c;
+    --proj:#0f6e56; --proj-bg:#e1f5ee; --proj-ink:#0f6e56;
+    --amber:#b07012; --amber-bg:#faeeda; --amber-ink:#854f0b;
+    --red:#a32d2d; --red-bg:#fcebeb;
+    --accent:#534ab7; --accent-bg:#eeedfe; --accent-ink:#3c3489;
+    --radius:10px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#1b1a17; --surface:#26251f; --surface2:#211f1a; --line:#3a382f;
+      --ink:#ecebe3; --ink2:#a9a79c; --ink3:#7c7a70;
+      --todo-bg:#3a2418; --todo-ink:#f0997b;
+      --aware-bg:#13283a; --aware-ink:#85b7eb;
+      --proj-bg:#0e2b23; --proj-ink:#5dcaa5;
+      --amber-bg:#33260f; --amber-ink:#f0c477;
+      --red-bg:#331616; --accent-bg:#211c3d; --accent-ink:#cecbf6;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  header{display:flex;align-items:center;gap:14px;padding:13px 22px;border-bottom:1px solid var(--line);
+    background:var(--surface);position:sticky;top:0;z-index:20;flex-wrap:wrap}
+  .logo{display:flex;align-items:center;gap:9px;font-weight:600;font-size:16px}
+  .dot{width:20px;height:20px;border-radius:6px;background:var(--accent);display:inline-block}
+  .pipe{display:flex;align-items:center;gap:6px;color:var(--ink2);font-size:12px;flex-wrap:wrap}
+  .pipe b{color:var(--ink);font-weight:500}
+  .tag{font-size:11px;padding:3px 9px;border-radius:7px;white-space:nowrap}
+  .t-todo{background:var(--todo-bg);color:var(--todo-ink)}
+  .t-aware{background:var(--aware-bg);color:var(--aware-ink)}
+  .t-proj{background:var(--proj-bg);color:var(--proj-ink)}
+  nav{margin-left:auto;display:flex;gap:4px;background:var(--surface2);padding:4px;border-radius:9px;border:1px solid var(--line)}
+  nav button{border:0;background:transparent;color:var(--ink2);font-size:13px;padding:7px 14px;border-radius:7px;cursor:pointer;font-weight:500}
+  nav button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+  main{padding:20px 22px;max-width:1240px;margin:0 auto}
+
+  /* scope filter bar */
+  .scopebar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+  .scopebar .lbl{font-size:12px;color:var(--ink2)}
+  .chip-row{display:flex;gap:6px;flex-wrap:wrap}
+  .schip{font-size:12px;padding:5px 12px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink2);cursor:pointer}
+  .schip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .schip .b{font-weight:600}
+
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px}
+  .stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:13px 15px}
+  .stat .n{font-size:24px;font-weight:600;margin-top:2px}
+  .stat .l{font-size:12px;color:var(--ink2)}
+
+  .boards{display:grid;grid-template-columns:1.05fr 1.05fr .9fr;gap:16px;align-items:start}
+  @media(max-width:900px){.boards{grid-template-columns:1fr}}
+  .col{background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:12px}
+  .col h2{font-size:13px;font-weight:600;margin:2px 4px 12px;display:flex;align-items:center;gap:8px}
+  .col h2 .c{font-size:11px;color:var(--ink3);font-weight:400}
+  .col h2 .cnt{margin-left:auto;font-size:11px;background:var(--surface);border:1px solid var(--line);color:var(--ink2);padding:1px 8px;border-radius:20px}
+  .col h2 .k{width:9px;height:9px;border-radius:3px;display:inline-block}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:11px 13px;margin-bottom:9px;cursor:pointer;transition:.12s}
+  .card:hover{border-color:var(--ink3);transform:translateY(-1px)}
+  .card.due{border-left:3px solid var(--red)}
+  .card.soon{border-left:3px solid var(--amber)}
+  .card.todo{border-left:3px solid var(--todo)}
+  .card .title{font-weight:500;font-size:14px}
+  .card .row{display:flex;align-items:center;gap:7px;margin-top:8px}
+  .card .meta{font-size:11px;color:var(--ink2)}
+  .av{border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;flex-shrink:0}
+  .av.s{width:22px;height:22px;font-size:10px}
+  .av.m{width:30px;height:30px;font-size:11px}
+  .av.l{width:38px;height:38px;font-size:13px}
+  .teamchip{font-size:10px;padding:1px 7px;border-radius:6px;background:var(--surface2);border:1px solid var(--line);color:var(--ink2)}
+  .pill{font-size:11px;padding:2px 8px;border-radius:6px;white-space:nowrap;margin-left:auto}
+  .pill.red{background:var(--red-bg);color:var(--red)} .pill.amber{background:var(--amber-bg);color:var(--amber-ink)}
+  .pill.gray{background:var(--surface2);color:var(--ink2)} .pill.proj{background:var(--proj-bg);color:var(--proj-ink)}
+
+  /* awareness checklist */
+  .chk{display:flex;align-items:flex-start;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px}
+  .chk input{margin-top:2px;width:16px;height:16px;accent-color:var(--proj);cursor:pointer;flex-shrink:0}
+  .chk.done .t{text-decoration:line-through;color:var(--ink3)}
+  .chk .t{font-size:13px}
+  .chk .s{font-size:11px;color:var(--ink2);margin-top:2px}
+  .chk .promote{font-size:11px;color:var(--accent-ink);cursor:pointer;margin-top:4px;display:inline-block}
+  .awprog{font-size:11px;color:var(--ink2);margin:2px 4px 10px;display:flex;align-items:center;gap:8px}
+  .awprog .b{flex:1;height:5px;background:var(--surface);border:1px solid var(--line);border-radius:99px;overflow:hidden}
+  .awprog .b>div{height:100%;background:var(--proj);width:0;transition:.2s}
+
+  /* project card */
+  .proj{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 13px;margin-bottom:9px;cursor:pointer;transition:.12s}
+  .proj:hover{border-color:var(--ink3);transform:translateY(-1px)}
+  .proj .pt{font-weight:600;font-size:13px}
+  .proj .ps{font-size:11px;color:var(--ink2);margin-top:2px}
+  .bar{height:6px;background:var(--surface2);border-radius:99px;overflow:hidden;margin:10px 0 8px}
+  .bar>div{height:100%;background:var(--proj)}
+  .mile{display:flex;gap:4px;flex-wrap:wrap}
+  .mile span{font-size:10px;padding:3px 7px;border-radius:6px}
+  .m-done{background:var(--proj-bg);color:var(--proj-ink)} .m-now{background:var(--amber-bg);color:var(--amber-ink)} .m-next{background:var(--surface2);color:var(--ink2)}
+
+  .reason{font-size:12px;color:var(--ink2);background:var(--surface2);border:1px dashed var(--line);border-radius:8px;padding:9px 12px;margin:0 0 16px;display:flex;gap:8px;align-items:flex-start}
+  .reason .o{color:var(--accent);flex-shrink:0}
+
+  /* org rollup */
+  .orggrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+  .tcard{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;cursor:pointer;transition:.12s}
+  .tcard:hover{border-color:var(--ink3);transform:translateY(-1px)}
+  .tcard .th{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .tcard .tn{font-weight:600;font-size:15px}
+  .health{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .h-ok{background:#1d9e75} .h-warn{background:#ef9f27} .h-risk{background:#e24b4a}
+  .tcard .nums{display:flex;gap:14px;margin-bottom:10px}
+  .tcard .nums div{font-size:12px;color:var(--ink2)}
+  .tcard .nums b{display:block;font-size:20px;color:var(--ink);font-weight:600}
+  .tcard .owners{display:flex;gap:-6px}
+  .miniproj{font-size:11px;color:var(--ink2);display:flex;align-items:center;gap:6px;margin-top:5px}
+  .miniproj .pill{margin-left:0;flex-shrink:0}
+  .pload{display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--line)}
+  .pload:last-child{border-bottom:0}
+  .pload .pb{flex:1;height:7px;background:var(--surface2);border-radius:99px;overflow:hidden}
+  .pload .pb>div{height:100%;background:var(--accent)}
+
+  /* delegate */
+  .tkbox{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px}
+  .tkbox input[type=text]{flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:15px;font-weight:500}
+  .btn{padding:9px 16px;border-radius:8px;font-weight:500;cursor:pointer;font-size:13px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+  .btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+  .dtask{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px}
+  .dtask.flash{animation:fl 1.2s ease}
+  @keyframes fl{0%,100%{border-color:var(--line)}30%{border-color:var(--accent);background:var(--accent-bg)}}
+
+  /* insights */
+  .ins-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:16px}
+  @media(max-width:900px){.ins-grid{grid-template-columns:1fr}}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+  .panel h3{margin:0 0 4px;font-size:14px;font-weight:600}
+  .panel .sub{font-size:12px;color:var(--ink2);margin-bottom:12px}
+  #graph{width:100%;height:360px;display:block;border-radius:8px;background:var(--surface2);cursor:grab}
+  .legend{display:flex;gap:14px;font-size:12px;color:var(--ink2);margin-top:10px;flex-wrap:wrap}
+  .legend i{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:5px}
+  .person{display:flex;align-items:center;gap:11px;padding:8px 0;border-bottom:1px solid var(--line)}
+  .person:last-child{border-bottom:0}
+  .person .nm{font-weight:500;font-size:13px}
+  .person .rl{font-size:11px;color:var(--ink2)}
+  .person .ct{margin-left:auto;text-align:right}
+  .person .ct b{font-size:14px}
+  .person .ct .x{font-size:11px;color:var(--ink2)}
+  .topic{margin-bottom:11px}
+  .topic .tl{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+  .topic .tb{height:7px;background:var(--surface2);border-radius:99px;overflow:hidden}
+  .insrow{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
+  .insrow:last-child{border-bottom:0}
+  .insrow .ic{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px}
+  .dchip{font-size:11px;background:var(--proj-bg);color:var(--proj-ink);padding:2px 9px;border-radius:6px;cursor:pointer;display:inline-block;margin:0 4px 4px 0}
+  .dchip:hover{outline:1.5px solid var(--proj)}
+
+  /* detail drawer */
+  #overlay{position:fixed;inset:0;background:rgba(0,0,0,.32);opacity:0;pointer-events:none;transition:.18s;z-index:40}
+  #overlay.open{opacity:1;pointer-events:auto}
+  #drawer{position:fixed;top:0;right:0;height:100%;width:min(440px,92vw);background:var(--surface);border-left:1px solid var(--line);
+    transform:translateX(100%);transition:.22s;z-index:41;overflow-y:auto;padding:20px 22px}
+  #drawer.open{transform:translateX(0)}
+  #drawer .x{position:absolute;top:16px;right:18px;cursor:pointer;color:var(--ink2);font-size:20px;line-height:1}
+  .dh{font-size:18px;font-weight:600;margin:4px 50px 4px 0}
+  .dmeta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 16px}
+  .dsec{margin:16px 0}
+  .dsec .lab{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink3);margin-bottom:7px;font-weight:600}
+  .email{background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:12px 13px;font-size:13px}
+  .email .ef{font-size:11px;color:var(--ink2);margin-bottom:6px}
+  .why{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-size:11px;background:var(--surface2);border:1px solid var(--line);color:var(--ink2);padding:2px 8px;border-radius:6px}
+  .thread{font-size:12px;color:var(--ink2);padding:6px 0;border-bottom:1px solid var(--line);display:flex;gap:8px}
+  .thread:last-child{border-bottom:0}
+  .dacts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .subt{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--line)}
+  .subt:last-child{border-bottom:0}
+  .subt input{width:15px;height:15px;accent-color:var(--proj)}
+
+  .hidden{display:none}
+  footer{color:var(--ink3);font-size:11px;text-align:center;padding:18px}
+
+  /* login gate (cosmetic — see disclaimer) */
+  #gate{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}
+  #gate.hidden{display:none}
+  .gatecard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:30px 30px 24px;width:min(360px,92vw)}
+  .gatecard .dot{width:30px;height:30px;border-radius:9px;background:var(--accent);display:block;margin-bottom:16px}
+  .gatecard h1{font-size:19px;font-weight:600;margin:0 0 4px}
+  .gatecard p.sub{font-size:13px;color:var(--ink2);margin:0 0 20px}
+  .gatecard label{font-size:12px;color:var(--ink2);display:block;margin:0 0 5px}
+  .gatecard input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface2);color:var(--ink);font-size:14px;margin-bottom:14px}
+  .gatecard button{width:100%;padding:11px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-weight:600;font-size:14px;cursor:pointer}
+  .gateerr{color:var(--red);font-size:12px;margin:0 0 12px;min-height:15px}
+  .gatewarn{font-size:11px;color:var(--ink3);background:var(--amber-bg);color:var(--amber-ink);border-radius:7px;padding:8px 10px;margin-top:16px;line-height:1.45}
+  .logout{cursor:pointer;color:var(--ink2);font-size:12px}
+  .logout:hover{color:var(--ink)}
+</style>
+</head>
+<body>
+<div id="gate">
+  <form class="gatecard" onsubmit="return doLogin(event)">
+    <span class="dot"></span>
+    <h1>Inbox Zero Board</h1>
+    <p class="sub">Sign in to continue</p>
+    <div class="gateerr" id="gate-err"></div>
+    <label for="gu">Username</label>
+    <input id="gu" autocomplete="off" autofocus />
+    <label for="gp">Password</label>
+    <input id="gp" type="password" autocomplete="off" />
+    <button type="submit">Sign in</button>
+    <div class="gatewarn"><b>Demo gate.</b> This is a static prototype — the login is cosmetic and provides no real security (credentials live in the page source). Do not put real or sensitive data behind it. Default: admin / admin.</div>
+  </form>
+</div>
+<header>
+  <div class="logo"><span class="dot"></span> Inbox Zero Board</div>
+  <div class="pipe"><span>Outlook</span> → <b>Gemma</b> <span style="color:var(--accent)">⬡ local</span> →
+    <span class="tag t-todo">To-Do</span><span class="tag t-aware">Awareness</span><span class="tag t-proj">Projects</span></div>
+  <nav>
+    <button id="nav-board" class="on" onclick="show('board')">Board</button>
+    <button id="nav-org" onclick="show('org')">Org</button>
+    <button id="nav-delegate" onclick="show('delegate')">Delegate</button>
+    <button id="nav-ins" onclick="show('ins')">Insights</button>
+  </nav>
+  <span class="logout" onclick="logout()" title="Sign out" style="margin-left:14px">Sign out</span>
+</header>
+
+<main>
+  <!-- BOARD -->
+  <section id="view-board">
+    <div class="reason"><span class="o">⬡</span><span>312 emails scanned locally — 264 archived as noise, 48 sorted. Filter by team to roll up across your org, or "Mine" for your own queue. Click any card for the full thread + actions.</span></div>
+
+    <div class="scopebar">
+      <span class="lbl">Scope</span>
+      <div class="chip-row" id="scopechips"></div>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="boards">
+      <div class="col" id="col-todo"></div>
+      <div class="col" id="col-aware"></div>
+      <div class="col" id="col-proj"></div>
+    </div>
+  </section>
+
+  <!-- ORG -->
+  <section id="view-org" class="hidden">
+    <div class="reason"><span class="o">⬡</span><span>Roll-up across every team you oversee — from VP down to each contributor. Health = open load + anything time-sensitive or blocked. Click a team to filter the Board to it.</span></div>
+    <div id="org-teams" class="orggrid"></div>
+    <div class="panel" style="margin-top:18px"><h3>Workload by person</h3><div class="sub">Open items owned, across teams</div><div id="org-people"></div></div>
+  </section>
+
+  <!-- DELEGATE -->
+  <section id="view-delegate" class="hidden">
+    <div class="reason"><span class="o">⬡</span><span>File a ticket — engine unpacks the implied asks, routes each to the right person from your history, and pre-fills the details they need. Missing info is flagged, never guessed.</span></div>
+    <div class="tkbox">
+      <div style="font-size:12px;color:var(--ink2);margin-bottom:8px">New ticket</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input id="ticket-in" type="text" value="Create sponsor meeting" />
+        <button class="btn pri" onclick="runTicket()">Unpack ↗</button>
+      </div>
+      <div id="ticket-suggest" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"></div>
+      <div style="font-size:11px;color:var(--ink3);margin-top:8px">or click a domain in Insights to seed one</div>
+    </div>
+    <div id="delegate-out"></div>
+  </section>
+
+  <!-- INSIGHTS -->
+  <section id="view-ins" class="hidden">
+    <div class="reason"><span class="o">⬡</span><span>Relationship graph from who you email and how fast. Node size = volume, line = interaction strength, color = influence. <b>Tap a person</b> to see what they handle — click a domain to start a delegate ticket.</span></div>
+    <div class="ins-grid">
+      <div class="panel">
+        <h3>Communication network</h3>
+        <div class="sub">Drag nodes. Tap one to inspect.</div>
+        <svg id="graph" viewBox="0 0 640 360" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="legend">
+          <span><i style="background:#d85a30"></i>high influence</span>
+          <span><i style="background:#b07012"></i>medium</span>
+          <span><i style="background:#185fa5"></i>low / FYI</span>
+          <span><i style="background:#534ab7"></i>you</span>
+        </div>
+        <div id="nodeinfo" style="margin-top:12px;padding:11px 13px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;font-size:13px;color:var(--ink2)">Tap a person to see what they handle — the same map powers the Delegate tab.</div>
+      </div>
+      <div>
+        <div class="panel" style="margin-bottom:16px"><h3>Top people</h3><div class="sub">By two-way volume this quarter</div><div id="people"></div></div>
+        <div class="panel" style="margin-bottom:16px"><h3>What you talk about</h3><div class="sub">Topic share of active threads</div><div id="topics"></div></div>
+        <div class="panel"><h3>Things worth knowing</h3><div id="insights"></div></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>Prototype · seed data · local-only · no email leaves this machine</footer>
+
+<div id="overlay" onclick="closeDrawer()"></div>
+<div id="drawer"><span class="x" onclick="closeDrawer()">✕</span><div id="drawer-body"></div></div>
+
+<script>
+/* ---------- login gate (COSMETIC ONLY — static site, no real auth) ---------- */
+const AUTH={user:'admin',pass:'admin'};   // change here; visible in source by design of static hosting
+function doLogin(e){
+  e.preventDefault();
+  const u=document.getElementById('gu').value.trim(), p=document.getElementById('gp').value;
+  if(u===AUTH.user && p===AUTH.pass){
+    try{sessionStorage.setItem('izb_auth','1');}catch(_){}
+    document.getElementById('gate').classList.add('hidden');
+  }else{
+    document.getElementById('gate-err').textContent='Incorrect username or password.';
+  }
+  return false;
+}
+function logout(){try{sessionStorage.removeItem('izb_auth');}catch(_){}location.reload();}
+(function initGate(){
+  let authed=false; try{authed=sessionStorage.getItem('izb_auth')==='1';}catch(_){}
+  if(authed) document.getElementById('gate').classList.add('hidden');
+})();
+
+/* ---------- palette helpers ---------- */
+const PAL={SK:'#185fa5',DN:'#534ab7',LO:'#d4537e',FM:'#0f6e56',RC:'#d85a30',TK:'#b07012',MC:'#888780'};
+const colorOf=i=>PAL[i]||'#888780';
+const infColor=i=>i===2?'#d85a30':i===1?'#b07012':'#185fa5';
+const av=(init,size)=>`<span class="av ${size}" style="background:${colorOf(init)}">${init}</span>`;
+
+/* ---------- people (who handles what) ---------- */
+const people=[
+  {n:'Sarah Kim',r:'Legal counsel',team:'Legal',inf:2,sent:34,recv:41,init:'SK',domains:['contracts','NDAs','redlines']},
+  {n:'David Ng',r:'VP Eng (your mgr)',team:'Eng',inf:2,sent:58,recv:52,init:'DN',domains:['approvals','headcount','strategy']},
+  {n:'Lena Ortiz',r:'Design lead',team:'Design',inf:1,sent:29,recv:33,init:'LO',domains:['design review','decks','branding']},
+  {n:'Fran Méndez',r:'Facilities',team:'Ops',inf:1,sent:24,recv:27,init:'FM',domains:['room booking','AV setup','parking']},
+  {n:'Rosa Castro',r:'Catering vendor',team:'Ops',inf:1,sent:19,recv:16,init:'RC',domains:['catering','dietary','invoicing']},
+  {n:'Tom Klein',r:'Exec assistant',team:'Exec',inf:1,sent:22,recv:20,init:'TK',domains:['calendar invites','scheduling','travel']},
+  {n:'M. Chen',r:'New hire',team:'Eng',inf:0,sent:6,recv:9,init:'MC',domains:['onboarding']},
+];
+let peopleByInit;
+function rebuildPeople(){peopleByInit=Object.fromEntries(people.map(p=>[p.init,p]));}
+rebuildPeople();
+
+/* ---------- board data (owner + team for exec→IC rollup) ---------- */
+const todos=[
+  {id:'t1',cls:'due',title:'Countersign the Acme NDA',owner:'You',team:'Legal',due:'due tomorrow',pill:['red','due tmr'],
+   from:'Sarah Kim <sarah@acme>',subj:'Please countersign — Acme NDA',
+   body:"Hi — legal cleared the redlines this morning. Attaching the final NDA for your signature; we need it back before the Acme kickoff tomorrow. Let me know if anything looks off.",
+   why:['addressed to you','asks a question','deadline detected'],
+   thread:['Jun 9 — you: "can legal take a pass?"','Jun 12 — Sarah: "redlines attached"','Jun 14 — Sarah: "final, please sign"']},
+  {id:'t2',cls:'soon',title:'Reply with travel dates for the offsite',owner:'You',team:'Ops',due:'Fri',pill:['amber','Fri'],
+   from:'Tom Klein <tom@acme>',subj:'Offsite travel — need your dates',
+   body:"Booking flights for the Q3 offsite. Can you send your preferred travel dates by end of week so I can lock fares?",
+   why:['addressed to you','deadline detected'],
+   thread:['Jun 13 — Tom: "offsite is Aug 5-7"','Jun 14 — Tom: "need dates EOW"']},
+  {id:'t3',cls:'todo',title:'Review the Q3 budget draft',owner:'You',team:'Finance',due:'no date',pill:['gray','no date'],
+   from:'finance@acme',subj:'Q3 budget — draft for review',
+   body:"Draft Q3 budget attached (2 files). Flagged the marketing line for your input. No hard deadline but earlier is better.",
+   why:['to: you','attachment'],thread:['Jun 11 — Finance: "draft attached"']},
+  {id:'t4',cls:'todo',title:'Approve design mock v3',owner:'You',team:'Design',due:'today',pill:['gray','today'],
+   from:'Lena Ortiz <lena@acme>',subj:'Mock v3 — ok to ship?',
+   body:"v3 addresses your earlier comments on spacing and the hero. Ok to ship to eng, or want another round?",
+   why:['asks a question','reply expected'],thread:['Jun 8 — you: "tighten spacing"','Jun 14 — Lena: "v3, ok to ship?"']},
+  {id:'t5',cls:'soon',title:'Finalize vendor SOW',owner:'DN',team:'Eng',due:'Thu',pill:['amber','Thu'],
+   from:'David Ng <david@acme>',subj:'SOW needs your sign-off',
+   body:"I've drafted the statement of work for the data vendor. Needs your sign-off before procurement opens the PO.",
+   why:['delegated to David','blocks procurement'],thread:['Jun 10 — David: "drafting SOW"','Jun 14 — David: "ready for sign-off"']},
+  {id:'t6',cls:'todo',title:'Ship onboarding checklist',owner:'MC',team:'Eng',due:'next wk',pill:['gray','next wk'],
+   from:'M. Chen <mchen@acme>',subj:'Onboarding doc draft',
+   body:"First draft of the eng onboarding checklist. Would love a review when you have a sec.",
+   why:['delegated to Chen','review requested'],thread:['Jun 14 — Chen: "draft ready"']},
+];
+
+const aware=[
+  {id:'a1',t:'Eng deploy went out — v2.4',s:"cc'd · 8 on thread",team:'Eng',done:false},
+  {id:'a2',t:'Industry newsletter — weekly',s:'bulk · safe to skim',team:'—',done:false},
+  {id:'a3',t:'All-hands notes posted',s:'FYI · linked to project',team:'Exec',done:false},
+  {id:'a4',t:'Office closed July 4',s:'broadcast · no action',team:'Ops',done:false},
+  {id:'a5',t:'New hire intro: M. Chen',s:"cc'd · welcome thread",team:'Eng',done:false},
+  {id:'a6',t:'Design system v2 shipped',s:"cc'd · changelog",team:'Design',done:false},
+];
+
+const projects=[
+  {id:'p1',t:'NeurIPS 2026 submission',team:'Eng',owner:'You',s:'14 emails · abstract in 12 days',pct:55,status:['proj','on track'],
+   miles:[['done','abstract'],['done','coauthors'],['now','experiments'],['next','draft'],['next','camera-ready']],
+   tasks:[['x','Confirm coauthors'],['x','Submit abstract'],['o','Run final experiments'],['','Write draft'],['','Camera-ready']],
+   emails:['CFP deadline notice','Coauthor confirmations (×4)','Reviewer assignments']},
+  {id:'p2',t:'Acme vendor contract',team:'Legal',owner:'Sarah Kim',s:'9 emails · awaiting redlines',pct:70,status:['amber','blocked'],
+   miles:[['done','intro'],['done','quote'],['now','legal review'],['next','sign']],
+   tasks:[['x','Intro call'],['x','Get quote'],['o','Legal redlines'],['','Countersign']],
+   emails:['Vendor intro','Quote PDF','Redline thread']},
+  {id:'p3',t:'Q3 hiring — ML eng',team:'Eng',owner:'David Ng',s:'21 emails · 3 in pipeline',pct:40,status:['proj','active'],
+   miles:[['done','JD'],['done','screen'],['now','onsites'],['next','offer']],
+   tasks:[['x','Write JD'],['x','Phone screens'],['o','Onsite loops'],['','Offer']],
+   emails:['JD approval','Recruiter pipeline','Candidate scheduling']},
+];
+
+const topics=[
+  {n:'Hiring & interviews',pct:28,c:'#534ab7'},{n:'NeurIPS paper',pct:22,c:'#0f6e56'},
+  {n:'Legal & contracts',pct:18,c:'#d85a30'},{n:'Product / design',pct:17,c:'#185fa5'},
+  {n:'Ops & logistics',pct:15,c:'#b07012'},
+];
+const insights=[
+  ['var(--todo-bg)','var(--todo-ink)','◷','You reply to David in 22 min avg, but legal threads wait 1.8 days — your slowest loop.'],
+  ['var(--proj-bg)','var(--proj-ink)','↑','Hiring overtook paper-writing as your #1 topic this month (+11%).'],
+  ['var(--aware-bg)','var(--aware-ink)','⤺','3 emails you sent are waiting on a reply >5 days — nudge candidates + vendor.'],
+  ['var(--amber-bg)','var(--amber-ink)','◎','Sarah (legal) is a bottleneck node: high influence, slow loop. Every project routes through her.'],
+];
+
+/* ---------- delegate playbook ---------- */
+const playbooks={
+  'sponsor meeting':{learned:'Q1 sponsor lunch',subtasks:[
+    {task:'Reserve a room',who:'FM',evidence:'booked rooms via her 6×',need:[['date','✓'],['headcount','✓'],['AV needs','✓']],
+     draft:'Hi Fran — need a room for 12 on Jul 18, 2pm, projector + screen share. Same setup as Q1 lunch. Thanks!'},
+    {task:'Order catering',who:'RC',evidence:'last 3 sponsor events',need:[['headcount','✓'],['budget code','✓'],['dietary','?']],
+     draft:'Hi Rosa — catering for 12 on Jul 18. Budget code MKT-204. Any dietary needs to flag [fill in]?'},
+    {task:'Send calendar invite',who:'TK',evidence:'owns sponsor invites',need:[['date','✓'],['attendee list','✓']],
+     draft:'Hi Tom — please send the Jul 18 2pm sponsor invite to the attendee list. Thanks!'},
+    {task:'Prepare sponsor deck',who:null,evidence:'no clear owner in history',need:[['template','?']],draft:null},
+  ]},
+  'onboard new hire':{learned:'3 past eng onboards',subtasks:[
+    {task:'Set up workspace & desk',who:'FM',evidence:'set up 4 desks via her',need:[['start date','✓'],['location','✓']],
+     draft:'Hi Fran — new eng hire starts Jul 7, in-office. Can you set up a desk + monitor near the eng pod? Thanks!'},
+    {task:'Schedule orientation',who:'TK',evidence:'runs new-hire orientation',need:[['start date','✓'],['attendee list','?']],
+     draft:'Hi Tom — please book day-1 orientation for Jul 7. Who should be on the welcome panel [fill in]?'},
+    {task:'Provision accounts & laptop',who:null,evidence:'no IT contact in your history',need:[['employee ID','?']],draft:null},
+    {task:'Assign onboarding buddy',who:null,evidence:'you pick this each time',need:[['buddy','?']],draft:null},
+  ]},
+  'offsite':{learned:'Q3 offsite + 2 prior',subtasks:[
+    {task:'Book venue',who:'FM',evidence:'booked last 2 offsites',need:[['dates','✓'],['headcount','✓'],['location','?']],
+     draft:'Hi Fran — team offsite Aug 5-7, ~24 people. Can you source a venue? Preferred area [fill in].'},
+    {task:'Arrange catering',who:'RC',evidence:'catered both prior offsites',need:[['headcount','✓'],['budget code','✓'],['dietary','?']],
+     draft:'Hi Rosa — catering for 24 across Aug 5-7. Budget code OPS-118. Dietary needs [fill in]?'},
+    {task:'Book travel',who:'TK',evidence:'handles team travel',need:[['dates','✓'],['attendee list','✓']],
+     draft:'Hi Tom — please book travel for the team to the Aug 5-7 offsite using the attached roster. Thanks!'},
+    {task:'Draft agenda',who:null,evidence:'no clear owner in history',need:[['themes','?']],draft:null},
+  ]},
+  'vendor renewal':{learned:'Acme + Globex renewals',subtasks:[
+    {task:'Pull current contract',who:'SK',evidence:'legal owns all contracts',need:[['vendor','✓'],['contract ID','✓']],
+     draft:'Hi Sarah — can you pull the current Acme contract (ID AC-2024-11) ahead of renewal? Thanks!'},
+    {task:'Negotiate redlines',who:'SK',evidence:'ran last 2 redline rounds',need:[['vendor','✓'],['priority terms','?']],
+     draft:'Hi Sarah — flagging the Acme renewal for redlines. Priority terms to push on [fill in].'},
+    {task:'Get budget approval',who:'DN',evidence:'approves vendor spend',need:[['amount','✓'],['budget code','✓']],
+     draft:'Hi David — Acme renewal is $48k, budget code ENG-300. Ok to proceed? Thanks!'},
+    {task:'Countersign',who:null,evidence:'you sign these yourself',need:[],draft:null},
+  ]}
+};
+/* domain → which playbook + subtask to highlight (live graph→delegate link) */
+const domainRoute={'room booking':['sponsor meeting','Reserve a room'],'AV setup':['sponsor meeting','Reserve a room'],
+  'catering':['sponsor meeting','Order catering'],'dietary':['sponsor meeting','Order catering'],
+  'calendar invites':['sponsor meeting','Send calendar invite'],'scheduling':['offsite','Book travel'],
+  'travel':['offsite','Book travel'],'onboarding':['onboard new hire','Schedule orientation'],
+  'contracts':['vendor renewal','Pull current contract'],'redlines':['vendor renewal','Negotiate redlines'],
+  'approvals':['vendor renewal','Get budget approval']};
+
+/* ---------- scope filter ---------- */
+let scope='All';
+function teams(){return [...new Set(todos.map(t=>t.team).concat(projects.map(p=>p.team)))].filter(Boolean)}
+function inScope(item){
+  if(scope==='All')return true;
+  if(scope==='Mine')return item.owner==='You';
+  return item.team===scope;
+}
+function renderScope(){
+  const opts=['All','Mine',...teams()];
+  document.getElementById('scopechips').innerHTML=opts.map(o=>{
+    const n = o==='All'?todos.length+projects.length : o==='Mine'?todos.filter(t=>t.owner==='You').length
+            : todos.filter(t=>t.team===o).length+projects.filter(p=>p.team===o).length;
+    return `<span class="schip ${o===scope?'on':''}" onclick="setScope('${o}')">${o} <span class="b">${n}</span></span>`;
+  }).join('');
+}
+function setScope(s){scope=s;renderScope();renderBoard();}
+
+/* ---------- board render ---------- */
+function ownerAv(o){return o==='You'?`<span class="av s" style="background:var(--accent)">Y</span>`:av(o,'s')}
+function ownerName(o){return o==='You'?'You':(peopleByInit[o]?.n||o)}
+function renderStats(){
+  const ft=todos.filter(inScope), fp=projects.filter(inScope);
+  const due=ft.filter(t=>t.cls==='due'||t.cls==='soon').length;
+  document.getElementById('stats').innerHTML=[
+    ['Open tasks',ft.length,'var(--todo-ink)'],['Time-sensitive',due,'var(--amber-ink)'],
+    ['Active projects',fp.length,'var(--proj-ink)'],['FYI / awareness',aware.filter(a=>!a.done).length,'var(--aware-ink)'],
+    ['Avg reply time','4.2h','var(--ink)'],
+  ].map(s=>`<div class="stat"><div class="l">${s[0]}</div><div class="n" style="color:${s[2]}">${s[1]}</div></div>`).join('');
+}
+function renderBoard(){
+  renderStats();
+  const ft=todos.filter(inScope);
+  document.getElementById('col-todo').innerHTML=
+    `<h2><span class="k" style="background:var(--todo)"></span>To-Do <span class="c">action required</span><span class="cnt">${ft.length}</span></h2>`+
+    (ft.map(t=>`<div class="card ${t.cls}" onclick="openTodo('${t.id}')">
+        <div class="title">${t.title}</div>
+        <div class="row">${ownerAv(t.owner)}<span class="meta">${ownerName(t.owner)}</span>
+          <span class="teamchip">${t.team}</span>${pill(t.pill)}</div>
+      </div>`).join('')||emptyMsg());
+
+  const open=aware.filter(a=>!a.done).length, total=aware.length, pctAck=Math.round((total-open)/total*100);
+  document.getElementById('col-aware').innerHTML=
+    `<h2><span class="k" style="background:var(--aware)"></span>Awareness <span class="c">cc'd · clear when seen</span><span class="cnt">${open}</span></h2>`+
+    `<div class="awprog"><span>${total-open}/${total} cleared</span><span class="b"><div style="width:${pctAck}%"></div></span></div>`+
+    aware.map(a=>`<div class="chk ${a.done?'done':''}">
+        <input type="checkbox" ${a.done?'checked':''} onchange="toggleAware('${a.id}')" />
+        <div><div class="t">${a.t}</div><div class="s">${a.s}${a.team!=='—'?' · '+a.team:''}</div>
+          ${a.done?'':`<span class="promote" onclick="promote('${a.id}')">+ promote to task ↗</span>`}</div>
+      </div>`).join('');
+
+  const fp=projects.filter(inScope);
+  document.getElementById('col-proj').innerHTML=
+    `<h2><span class="k" style="background:var(--proj)"></span>Projects <span class="c">auto-grouped</span><span class="cnt">${fp.length}</span></h2>`+
+    (fp.map(p=>`<div class="proj" onclick="openProj('${p.id}')">
+        <div style="display:flex;align-items:center;gap:7px"><span class="pt">${p.t}</span>${pill(p.status)}</div>
+        <div class="ps">${ownerName(p.owner)} · ${p.s}</div>
+        <div class="bar"><div style="width:${p.pct}%"></div></div>
+        <div class="mile">${p.miles.map(m=>`<span class="m-${m[0]}">${m[0]==='done'?'✓ ':m[0]==='now'?'◷ ':''}${m[1]}</span>`).join('')}</div>
+      </div>`).join('')||emptyMsg());
+}
+function pill(p){return `<span class="pill ${p[0]}">${p[1]}</span>`}
+function emptyMsg(){return `<div style="font-size:12px;color:var(--ink3);padding:14px;text-align:center">Nothing in this scope</div>`}
+
+/* ---------- awareness actions ---------- */
+function toggleAware(id){const a=aware.find(x=>x.id===id);a.done=!a.done;renderBoard();}
+function promote(id){
+  const a=aware.find(x=>x.id===id);
+  todos.unshift({id:'t'+Date.now(),cls:'todo',title:a.t.replace(/^.*?: /,'Follow up: '),owner:'You',team:a.team==='—'?'Eng':a.team,
+    due:'no date',pill:['gray','new'],from:'(promoted from awareness)',subj:a.t,body:'Promoted from your Awareness board.',
+    why:['promoted by you'],thread:[]});
+  a.done=true;renderBoard();
+}
+
+/* ---------- detail drawer ---------- */
+function openDrawer(html){document.getElementById('drawer-body').innerHTML=html;
+  document.getElementById('drawer').classList.add('open');document.getElementById('overlay').classList.add('open');}
+function closeDrawer(){document.getElementById('drawer').classList.remove('open');document.getElementById('overlay').classList.remove('open');}
+function openTodo(id){
+  const t=todos.find(x=>x.id===id);
+  openDrawer(`<div class="dh">${t.title}</div>
+    <div class="dmeta">${ownerAv(t.owner)}<span style="font-size:13px">${ownerName(t.owner)}</span>
+      <span class="teamchip">${t.team}</span>${pill(t.pill)}</div>
+    <div class="dsec"><div class="lab">Source email</div>
+      <div class="email"><div class="ef">${t.from} — ${t.subj}</div>${t.body}</div></div>
+    <div class="dsec"><div class="lab">Why this is a task</div><div class="why">${t.why.map(w=>`<span class="chip">${w}</span>`).join('')}</div></div>
+    ${t.thread.length?`<div class="dsec"><div class="lab">Thread (${t.thread.length})</div>${t.thread.map(m=>`<div class="thread">${m}</div>`).join('')}</div>`:''}
+    <div class="dsec"><div class="lab">Actions</div><div class="dacts">
+      <button class="btn pri" onclick="completeTodo('${t.id}')">Mark done</button>
+      <button class="btn" onclick="closeDrawer()">Snooze</button>
+      <button class="btn" onclick="show('delegate');closeDrawer()">Delegate ↗</button>
+      <button class="btn" onclick="alert('Draft reply (prototype)')">Draft reply</button>
+    </div></div>`);
+}
+function completeTodo(id){const i=todos.findIndex(x=>x.id===id);if(i>=0)todos.splice(i,1);closeDrawer();renderBoard();}
+function openProj(id){
+  const p=projects.find(x=>x.id===id);
+  openDrawer(`<div class="dh">${p.t}</div>
+    <div class="dmeta">${ownerName(p.owner)==='You'?ownerAv('You'):''}<span style="font-size:13px">${ownerName(p.owner)}</span>
+      <span class="teamchip">${p.team}</span>${pill(p.status)}</div>
+    <div class="dsec"><div class="lab">Progress · ${p.pct}%</div><div class="bar"><div style="width:${p.pct}%"></div></div>
+      <div style="font-size:12px;color:var(--ink2)">${p.s}</div></div>
+    <div class="dsec"><div class="lab">Tasks</div>${p.tasks.map(t=>`<div class="subt">
+        <input type="checkbox" ${t[0]==='x'?'checked':''} disabled />
+        <span style="${t[0]==='x'?'text-decoration:line-through;color:var(--ink3)':t[0]==='o'?'color:var(--amber-ink)':''}">${t[1]}</span>
+        ${t[0]==='o'?'<span class="pill amber" style="margin-left:auto">in progress</span>':''}</div>`).join('')}</div>
+    <div class="dsec"><div class="lab">Linked emails (${p.emails.length})</div>${p.emails.map(e=>`<div class="thread">✉ ${e}</div>`).join('')}</div>`);
+}
+
+/* ---------- org rollup ---------- */
+const initOf=o=>o==='You'?'You':(Object.keys(peopleByInit).find(i=>peopleByInit[i].n===o)||o);
+function renderOrg(){
+  const tg={};
+  teams().forEach(tm=>tg[tm]={tasks:0,urgent:0,projs:[],owners:new Set()});
+  todos.forEach(t=>{const g=tg[t.team];if(!g)return;g.tasks++;if(t.cls==='due'||t.cls==='soon')g.urgent++;g.owners.add(initOf(t.owner));});
+  projects.forEach(p=>{const g=tg[p.team];if(!g)return;g.projs.push(p);g.owners.add(initOf(p.owner));});
+  document.getElementById('org-teams').innerHTML=teams().map(tm=>{
+    const g=tg[tm], blocked=g.projs.some(p=>p.status[1]==='blocked');
+    const h = (g.urgent>=2||blocked)?'risk':(g.urgent===1||g.projs.length>1)?'warn':'ok';
+    const hlbl={risk:'needs attention',warn:'watch',ok:'healthy'}[h];
+    const ow=[...g.owners].slice(0,4).map(o=>o==='You'?`<span class="av s" style="background:var(--accent);margin-right:-6px;border:2px solid var(--surface)">Y</span>`:`<span class="av s" style="background:${colorOf(o)};margin-right:-6px;border:2px solid var(--surface)">${o}</span>`).join('');
+    return `<div class="tcard" onclick="setScope('${tm}');show('board')">
+      <div class="th"><span class="health h-${h}"></span><span class="tn">${tm}</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--ink2)">${hlbl}</span></div>
+      <div class="nums"><div><b>${g.tasks}</b>open tasks</div><div><b style="color:${g.urgent?'var(--amber-ink)':'var(--ink)'}">${g.urgent}</b>time-sensitive</div><div><b>${g.projs.length}</b>projects</div></div>
+      ${g.projs.map(p=>`<div class="miniproj">${pill(p.status)} ${p.t} · ${p.pct}%</div>`).join('')}
+      <div class="owners" style="margin-top:10px">${ow}</div>
+    </div>`;
+  }).join('');
+  // workload by person
+  const load={You:0};people.forEach(p=>load[p.init]=0);
+  todos.forEach(t=>load[t.owner]=(load[t.owner]||0)+1);
+  projects.forEach(p=>{if(p.owner!=='You'){const k=Object.keys(peopleByInit).find(i=>peopleByInit[i].n===p.owner);if(k)load[k]=(load[k]||0)+1;}else load.You++;});
+  const max=Math.max(1,...Object.values(load));
+  const ordered=Object.entries(load).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('org-people').innerHTML=ordered.map(([k,v])=>{
+    const nm=k==='You'?'You':(peopleByInit[k]?.n||k), avh=k==='You'?`<span class="av m" style="background:var(--accent)">Y</span>`:av(k,'m');
+    return `<div class="pload">${avh}<div style="min-width:96px"><div style="font-size:13px;font-weight:500">${nm}</div></div>
+      <div class="pb"><div style="width:${Math.round(v/max*100)}%"></div></div><b style="font-size:13px;min-width:18px;text-align:right">${v}</b></div>`;
+  }).join('');
+}
+
+/* ---------- delegate ---------- */
+let flashTask=null;
+function runTicket(){
+  const goal=document.getElementById('ticket-in').value.trim().toLowerCase().replace(/^create\s+/,'');
+  const pb=playbooks[goal], out=document.getElementById('delegate-out');
+  if(!pb){out.innerHTML=`<div style="background:var(--surface);border:1px dashed var(--line);border-radius:var(--radius);padding:20px;text-align:center;color:var(--ink2)">No learned playbook for "<b>${goal}</b>" yet. In the real build, Gemma decomposes it on the fly and learns the routing after you send.<br><br>Try <b>create sponsor meeting</b>.</div>`;return;}
+  let ready=0,detail=0,owner=0;
+  const rows=pb.subtasks.map(st=>{
+    const p=st.who?peopleByInit[st.who]:null, missing=st.need.some(f=>f[1]==='?');
+    let status,scls;
+    if(!p){status='pick person';scls='gray';owner++;}
+    else if(missing){status='needs 1 detail';scls='amber';detail++;}
+    else{status='ready';scls='proj';ready++;}
+    const avatar=p?av(p.init,'m'):`<span class="av m" style="background:#888780">?</span>`;
+    const route=p?`→ ${p.n} (${p.r}) · ${st.evidence}`:`→ ${st.evidence}`;
+    const need=st.need.map(f=>`<span style="color:${f[1]==='?'?'var(--amber-ink)':'var(--proj-ink)'}">${f[0]} ${f[1]==='?'?'— ask?':'✓'}</span>`).join(' · ');
+    const draft=st.draft?`<div style="margin-top:9px;padding:9px 11px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--ink2)">Needs: ${need}<p style="margin:6px 0 0;color:var(--ink)">"${st.draft.replace("[fill in]","<span style='background:var(--amber-bg);color:var(--amber-ink);padding:0 4px;border-radius:4px'>[fill in]</span>")}"</p></div>`:'';
+    const fl=(flashTask===st.task)?' flash':'';
+    return `<div class="dtask${fl}" data-task="${st.task}"><div style="display:flex;align-items:center;gap:10px">${avatar}
+        <div style="flex:1"><div style="font-weight:500">${st.task}</div><div style="font-size:12px;color:var(--ink2);margin-top:2px">${route}</div></div>
+        <span class="pill ${scls}" style="margin:0">${status}</span></div>${draft}</div>`;
+  }).join('');
+  out.innerHTML=`<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);margin-bottom:12px"><span style="color:var(--accent)">⬡</span> Unpacked into ${pb.subtasks.length} asks<span style="font-size:11px;background:var(--accent-bg);color:var(--accent-ink);padding:2px 8px;border-radius:6px;margin-left:auto">learned from "${pb.learned}"</span></div>${rows}
+    <div style="display:flex;gap:10px;align-items:center;margin-top:14px"><button class="btn">Review &amp; send all</button><span style="font-size:12px;color:var(--ink2)">${ready} ready · ${detail} needs a detail · ${owner} needs an owner</span></div>`;
+  flashTask=null;
+}
+
+/* ---------- insights side panels ---------- */
+function renderIns(){
+  document.getElementById('people').innerHTML=people.map(p=>({...p,tot:p.sent+p.recv})).sort((a,b)=>b.tot-a.tot).slice(0,5)
+    .map(p=>`<div class="person">${av(p.init,'l')}<div><div class="nm">${p.n}</div><div class="rl">${p.r}</div></div>
+       <div class="ct"><b>${p.tot}</b><div class="x">${p.sent}↑ ${p.recv}↓</div></div></div>`).join('');
+  document.getElementById('topics').innerHTML=topics.map(t=>`<div class="topic"><div class="tl"><span>${t.n}</span><span>${t.pct}%</span></div>
+     <div class="tb"><div style="width:${t.pct*3}%;height:100%;background:${t.c}"></div></div></div>`).join('');
+  document.getElementById('insights').innerHTML=insights.map(i=>`<div class="insrow"><div class="ic" style="background:${i[0]};color:${i[1]}">${i[2]}</div><div>${i[3]}</div></div>`).join('');
+}
+function showNode(n){
+  const box=document.getElementById('nodeinfo');
+  if(n.inf==='you'){box.innerHTML='<b style="color:var(--ink)">You</b> — center of the network. Everything routes through here.';return;}
+  const p=peopleByInit[n.id];if(!p)return;
+  box.innerHTML=`<div style="display:flex;align-items:center;gap:9px;margin-bottom:8px">${av(p.init,'m')}<b style="color:var(--ink)">${p.n}</b><span style="color:var(--ink3)">· ${p.r}</span></div>
+    <div style="margin-bottom:7px">Handles: ${p.domains.map(d=>`<span class="dchip" onclick="seedTicket('${d}')">${d}${domainRoute[d]?' ↗':''}</span>`).join('')}</div>
+    <div style="font-size:12px">${p.sent}↑ ${p.recv}↓ emails · click a domain to start a delegate ticket</div>`;
+}
+function renderSuggest(){
+  document.getElementById('ticket-suggest').innerHTML='<span style="font-size:11px;color:var(--ink3);align-self:center">learned playbooks:</span>'+
+    Object.keys(playbooks).map(g=>`<span class="dchip" style="background:var(--accent-bg);color:var(--accent-ink)" onclick="pickTicket('${g}')">${g}</span>`).join('');
+}
+function pickTicket(goal){document.getElementById('ticket-in').value='Create '+goal;flashTask=null;runTicket();}
+function seedTicket(domain){
+  const r=domainRoute[domain];
+  document.getElementById('ticket-in').value = r?('Create '+r[0]):('Request '+domain);
+  flashTask = r?r[1]:null;
+  show('delegate'); runTicket();
+}
+
+/* ---------- graph (vanilla force layout) ---------- */
+const W=640,H=360; let nodes=[],links=[],dragNode=null,raf=null;
+function initGraph(){
+  nodes=[{id:'you',label:'You',inf:'you',r:24,x:W/2,y:H/2,vx:0,vy:0}];
+  people.forEach((p,i)=>{const a=(i/people.length)*Math.PI*2;
+    nodes.push({id:p.init,label:p.n.split(' ')[0],inf:p.inf,r:10+(p.sent+p.recv)/9,x:W/2+Math.cos(a)*150,y:H/2+Math.sin(a)*110,vx:0,vy:0});
+    links.push({s:0,t:nodes.length-1,w:p.sent+p.recv});});
+  [['SK','DN'],['DN','LO'],['FM','RC'],['TK','FM'],['DN','MC'],['RC','TK']].forEach(([a,b])=>{
+    const si=nodes.findIndex(n=>n.id===a),ti=nodes.findIndex(n=>n.id===b);if(si>0&&ti>0)links.push({s:si,t:ti,w:18});});
+}
+function tick(){
+  for(let i=0;i<nodes.length;i++){const a=nodes[i];if(a===dragNode)continue;
+    for(let j=i+1;j<nodes.length;j++){const b=nodes[j];let dx=a.x-b.x,dy=a.y-b.y,d=Math.hypot(dx,dy)||1;
+      const rep=2600/(d*d),ux=dx/d,uy=dy/d;a.vx+=ux*rep;a.vy+=uy*rep;b.vx-=ux*rep;b.vy-=uy*rep;}}
+  links.forEach(l=>{const a=nodes[l.s],b=nodes[l.t];let dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1;
+    const ideal=l.s===0?108:150,f=(d-ideal)*0.012,ux=dx/d,uy=dy/d;
+    if(a!==dragNode){a.vx+=ux*f;a.vy+=uy*f}if(b!==dragNode){b.vx-=ux*f;b.vy-=uy*f}});
+  nodes.forEach(n=>{if(n===dragNode)return;n.vx+=(W/2-n.x)*0.0009;n.vy+=(H/2-n.y)*0.0009;
+    n.vx*=0.85;n.vy*=0.85;n.x+=n.vx;n.y+=n.vy;n.x=Math.max(n.r,Math.min(W-n.r,n.x));n.y=Math.max(n.r,Math.min(H-n.r,n.y));});
+  draw();raf=requestAnimationFrame(tick);
+}
+function draw(){
+  let s='';
+  links.forEach(l=>{const a=nodes[l.s],b=nodes[l.t];s+=`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="var(--line)" stroke-width="${Math.max(1,l.w/12)}"/>`;});
+  nodes.forEach((n,i)=>{const col=n.inf==='you'?'#534ab7':infColor(n.inf);
+    s+=`<g data-i="${i}" style="cursor:grab"><circle cx="${n.x}" cy="${n.y}" r="${n.r}" fill="${col}" opacity="${n.inf==='you'?1:.92}"/>
+      <text x="${n.x}" y="${n.y+n.r+13}" text-anchor="middle" font-size="11" fill="var(--ink2)">${n.label}</text></g>`;});
+  document.getElementById('graph').innerHTML=s;
+}
+function svgPt(e){const svg=document.getElementById('graph'),r=svg.getBoundingClientRect();
+  const cx=e.touches?e.touches[0].clientX:e.clientX,cy=e.touches?e.touches[0].clientY:e.clientY;
+  return{x:(cx-r.left)/r.width*W,y:(cy-r.top)/r.height*H};}
+function bindGraph(){const svg=document.getElementById('graph');
+  const start=e=>{const g=e.target.closest('g[data-i]');if(!g)return;dragNode=nodes[+g.dataset.i];showNode(dragNode);e.preventDefault();};
+  const move=e=>{if(!dragNode)return;const p=svgPt(e);dragNode.x=p.x;dragNode.y=p.y;dragNode.vx=0;dragNode.vy=0;e.preventDefault();};
+  const end=()=>{dragNode=null};
+  svg.addEventListener('mousedown',start);window.addEventListener('mousemove',move);window.addEventListener('mouseup',end);
+  svg.addEventListener('touchstart',start,{passive:false});window.addEventListener('touchmove',move,{passive:false});window.addEventListener('touchend',end);
+}
+
+/* ---------- view switch ---------- */
+let graphStarted=false;
+function show(v){
+  ['board','org','delegate','ins'].forEach(k=>{document.getElementById('view-'+k).classList.toggle('hidden',k!==v);
+    document.getElementById('nav-'+k).classList.toggle('on',k===v);});
+  if(v==='org')renderOrg();
+  if(v==='delegate'){renderSuggest();if(!document.getElementById('delegate-out').innerHTML)runTicket();}
+  if(v==='ins'){renderIns();if(!graphStarted){graphStarted=true;initGraph();bindGraph();tick();}}
+}
+
+/* ---------- optional: load real backend export, else use built-in demo seed ---------- */
+async function boot(){
+  try{
+    const r=await fetch('data.json',{cache:'no-store'});
+    if(r.ok){
+      const d=await r.json();
+      if(d.todos&&d.todos.length) todos.splice(0,todos.length,...d.todos);
+      if(d.aware&&d.aware.length) aware.splice(0,aware.length,...d.aware);
+      if(d.projects&&d.projects.length) projects.splice(0,projects.length,...d.projects);
+      if(d.people&&d.people.length){people.splice(0,people.length,...d.people);rebuildPeople();}
+    }
+  }catch(e){/* no data.json on static host → keep demo seed */}
+  renderScope();renderBoard();
+}
+boot();
+</script>
+</body>
+</html>

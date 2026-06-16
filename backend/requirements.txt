@@ -1,0 +1,6 @@
+# local-first deps only — no cloud LLM client
+msal>=1.28          # Microsoft auth (device-code flow) for Graph
+requests>=2.31       # Graph REST + Ollama HTTP
+python-dotenv>=1.0   # load .env config
+# Ollama runs as a local server (https://ollama.com) — talked to over HTTP, no python pkg needed
+# stdlib sqlite3 used for the store — no extra dependency
