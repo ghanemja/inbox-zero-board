@@ -133,3 +133,22 @@ def conf(support, last_seen):
 | One `playbooks['sponsor meeting']` | Clustered + generalized from your sent events |
 | Fields pre-marked ✓/? | Recurrence + "they-asked" inference |
 | Static drafts | Templated from your real tone exemplars |
+
+---
+
+## 8. Commitments ledger (chief-of-staff layer)
+
+Read promises/requests out of each message and track who owes whom — across every channel, not just email. `inboxzero/commitments.py`.
+
+- **Direction.** `party='them'` (they owe you) when you asked or they promised you; `party='you'` (you owe them) when they asked or you promised them.
+- **Detection.** Rules first (request/promise/due regexes — deterministic, testable). Gemma refines ambiguous cases via the same `asked_for` / `request_type` signals (hook marked in code).
+- **SLA.** `sla(due, overdue_days)` → `(level, label)` badge; overdue → red, near-term → amber, else ok. Feeds the Commitments board + nudge prompts.
+- **Storage.** `commitments` table (party, counterpart, what, channel, due, status). Resolved when a fulfilling reply lands (or user marks done).
+
+## 9. Per-person communication style (compounding-graph moat)
+
+`profiles.py` learns *how you write to each person* from your outgoing messages:
+
+- **Signals** (from_me only): greeting, sign-off, message length, emoji rate, preferred channel, response cadence (turnaround samples).
+- **Fingerprint.** `comm_style(profile)` summarizes → `{greet, signoff, len, emoji, channel, avg_words}`. Drafts + nudges mirror it, so an ask to a formal contact reads formal, a Slack-native one reads casual.
+- **Why it's a moat.** This is per-relationship, accumulates with use, and is invisible to a generic assistant — part of the graph that can't be lifted out.

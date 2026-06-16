@@ -15,6 +15,8 @@ or whenever source == "they_asked" (strong signal).
 """
 from __future__ import annotations
 
+import re
+from collections import Counter
 from datetime import datetime, timezone
 
 from . import store
@@ -23,10 +25,52 @@ REQUIRED_RATIO = 0.6
 MIN_OBS = 2
 DOMAIN_MIN_SUPPORT = 3
 
+_GREET_RE = re.compile(r"^\s*(hi there|hey there|dear|hello|hey|hi|good (?:morning|afternoon))\b", re.I)
+_SIGNOFF_RE = re.compile(r"\b(best regards|warm regards|kind regards|best|cheers|thanks!?|thank you|regards|talk soon)\b[\s,!.-]*$", re.I)
+_EMOJI_RE = re.compile(r"[\U0001F300-\U0001FAFF☀-➿]")
+
 
 def blank_profile(addr: str, name: str = "", role: str = "") -> dict:
     return {"name": name, "role": role, "domains": {}, "request_templates": {},
-            "counts": {"sent": 0, "recv": 0}}
+            "counts": {"sent": 0, "recv": 0}, "style": _blank_style()}
+
+
+def _blank_style() -> dict:
+    return {"msgs": 0, "greet": {}, "signoff": {}, "len_words": [], "emoji": 0,
+            "channel": {}, "turnaround_h": []}
+
+
+def _update_style(prof: dict, email: dict):
+    """Learn how YOU write to this person (from_me messages only). §2/§9."""
+    st = prof.setdefault("style", _blank_style())
+    body = (email.get("body", "") or "").strip()
+    st["msgs"] += 1
+    st["len_words"].append(len(body.split()))
+    st["len_words"] = st["len_words"][-50:]
+    if _EMOJI_RE.search(body):
+        st["emoji"] += 1
+    g = _GREET_RE.match(body)
+    if g:
+        st["greet"][g.group(1).title()] = st["greet"].get(g.group(1).title(), 0) + 1
+    last_line = body.splitlines()[-1] if body.splitlines() else ""
+    s = _SIGNOFF_RE.search(last_line)
+    if s:
+        st["signoff"][s.group(1).title()] = st["signoff"].get(s.group(1).title(), 0) + 1
+    ch = email.get("channel", "email")
+    st["channel"][ch] = st["channel"].get(ch, 0) + 1
+
+
+def comm_style(prof: dict) -> dict:
+    """Summarize the learned per-person communication style into a fingerprint."""
+    st = prof.get("style") or _blank_style()
+    n = max(1, st["msgs"])
+    avg = sum(st["len_words"]) / len(st["len_words"]) if st["len_words"] else 0
+    length = "short" if avg < 25 else "med" if avg < 70 else "long"
+    top = lambda d: (Counter(d).most_common(1)[0][0] if d else None)
+    return {"greet": top(st["greet"]), "signoff": top(st["signoff"]),
+            "len": length, "avg_words": round(avg),
+            "emoji": st["emoji"] / n >= 0.3, "channel": top(st["channel"]) or "email",
+            "samples": st["msgs"]}
 
 
 def _first_sentence(body: str) -> str:
@@ -49,6 +93,10 @@ def observe(conn, email: dict, me: str, extracted: dict):
     now = datetime.now(timezone.utc).isoformat()
 
     prof["counts"]["sent" if from_me else "recv"] += 1
+
+    # --- communication style: how YOU write to them (§2/§9) ---
+    if from_me:
+        _update_style(prof, email)
 
     # --- domain accrual (§2) ---
     for topic in extracted.get("topics", []):

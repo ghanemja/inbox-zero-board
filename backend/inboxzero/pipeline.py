@@ -5,7 +5,7 @@ seed); source 'outlook' pulls fresh via Graph.
 """
 from __future__ import annotations
 
-from . import store, classify, profiles
+from . import store, classify, profiles, commitments
 
 
 def run(me: str, source: str = "db", limit: int = 100, use_gemma: bool = True):
@@ -23,6 +23,7 @@ def run(me: str, source: str = "db", limit: int = 100, use_gemma: bool = True):
             result = classify.classify_email(e, me, use_gemma=use_gemma)
             store.save_classification(conn, result)
             profiles.observe(conn, e, me, result)
+            commitments.ingest(conn, e, me)   # chief-of-staff: who owes whom
             counts[result["board"]] = counts.get(result["board"], 0) + 1
 
     return counts

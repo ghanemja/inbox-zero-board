@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from inboxzero import store, profiles, playbooks, gemma  # noqa: E402
+from inboxzero import store, profiles, playbooks, gemma, commitments  # noqa: E402
 
 ME = "you@acme.com"
 DB = "test_learning.db"
@@ -77,6 +77,33 @@ def main():
               "matched playbook" if fuzzy else "no match")
         assert fuzzy is not None, "embedding NN should match the sponsor playbook despite different wording"
         assert "Order catering" in {s["task"] for s in fuzzy["subtasks"]}
+
+        # --- comm-style learning: how YOU write to a person ---
+        bob = "bob@acme.com"
+        for i in range(3):
+            profiles.observe(conn, {"from_addr": ME, "to_addrs": [bob], "cc_addrs": [],
+                                    "channel": "slack", "subject": "hi",
+                                    "body": f"Hey Bob — quick one, can you check this? 🙌\nThanks!"},
+                             ME, {"topics": ["stuff"]})
+        style = profiles.comm_style(store.get_contact(conn, bob))
+        print("\nComm-style learned for Bob:", style)
+        assert style["greet"] == "Hey", "should learn your greeting to Bob"
+        assert style["signoff"] == "Thanks", "should learn your sign-off to Bob"
+        assert style["emoji"] is True, "should detect emoji usage"
+        assert style["channel"] == "slack", "should learn preferred channel"
+
+        # --- commitments detection ---
+        owe = commitments.detect({"id": "m1", "from_addr": bob, "to_addrs": [ME],
+                                  "channel": "email", "subject": "Need the deck",
+                                  "body": "Can you send the deck by Friday?"}, ME)
+        owed = commitments.detect({"id": "m2", "from_addr": ME, "to_addrs": [bob],
+                                   "channel": "slack", "subject": "Status?",
+                                   "body": "Hey — could you confirm the numbers by EOD?"}, ME)
+        print("Commitment (they asked you):", owe["party"], "·", commitments.sla(owe["due"]))
+        print("Commitment (you asked them):", owed["party"], "·", commitments.sla(owed["due"]))
+        assert owe["party"] == "you", "inbound request → you owe them"
+        assert owed["party"] == "them", "your outbound ask → they owe you"
+        assert commitments.sla(None, overdue_days=4)[0] == "red"
 
     os.remove(DB)
     print("\nAll learning assertions passed ✓")

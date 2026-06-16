@@ -47,6 +47,17 @@ CREATE TABLE IF NOT EXISTS playbooks (
   goal          TEXT PRIMARY KEY,
   spec          TEXT       -- json: {learned, subtasks[], support, confidence}
 );
+CREATE TABLE IF NOT EXISTS commitments (
+  id            TEXT PRIMARY KEY,
+  party         TEXT,      -- 'them' (they owe you) | 'you' (you owe them)
+  counterpart   TEXT,      -- email_addr of the other person
+  what          TEXT,      -- the promised/requested thing
+  channel       TEXT,      -- email | slack | jira | cal
+  due           TEXT,      -- extracted due (nullable)
+  status        TEXT,      -- open | done
+  source_email  TEXT,
+  created_at    TEXT
+);
 """
 
 
@@ -102,3 +113,21 @@ def iter_emails(conn):
         d["to_addrs"] = json.loads(d["to_addrs"] or "[]")
         d["cc_addrs"] = json.loads(d["cc_addrs"] or "[]")
         yield d
+
+
+def save_commitment(conn, c: dict):
+    conn.execute(
+        """INSERT OR REPLACE INTO commitments
+           (id, party, counterpart, what, channel, due, status, source_email, created_at)
+           VALUES (:id,:party,:counterpart,:what,:channel,:due,:status,:source_email,:created_at)""",
+        c,
+    )
+
+
+def list_commitments(conn, status="open"):
+    rows = conn.execute("SELECT * FROM commitments WHERE status=? ORDER BY created_at", (status,))
+    return [dict(r) for r in rows]
+
+
+def resolve_commitment(conn, cid: str):
+    conn.execute("UPDATE commitments SET status='done' WHERE id=?", (cid,))

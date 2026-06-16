@@ -16,7 +16,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from inboxzero import store  # noqa: E402
+from inboxzero import store, profiles, commitments  # noqa: E402
+
+_FORMAL_SIGN = {"Best Regards", "Kind Regards", "Warm Regards", "Regards"}
+_FORMAL_GREET = {"Dear", "Hello", "Good Morning", "Good Afternoon"}
 
 
 def _init(name: str) -> str:
@@ -46,16 +49,34 @@ def export(db_path: str) -> dict:
                                  "status": ["proj", "new"], "miles": [["now", "triage"]],
                                  "tasks": [["o", r["task"] or "follow up"]], "emails": [r["subject"]]})
 
+        idx = {}
         for cr in conn.execute("SELECT email_addr, profile FROM contacts"):
             p = json.loads(cr["profile"])
             tot = p["counts"]["sent"] + p["counts"]["recv"]
+            cs = profiles.comm_style(p)
+            formality = 2 if (cs["greet"] in _FORMAL_GREET or cs["signoff"] in _FORMAL_SIGN) else 1
+            init = _init(p.get("name") or cr["email_addr"])
+            idx[cr["email_addr"]] = init
             people.append({"n": p.get("name") or cr["email_addr"], "r": p.get("role", ""),
                            "team": "Inbox", "inf": 2 if tot >= 40 else 1 if tot >= 20 else 0,
                            "sent": p["counts"]["sent"], "recv": p["counts"]["recv"],
-                           "init": _init(p.get("name") or cr["email_addr"]),
-                           "domains": list(p.get("domains", {}).keys())})
+                           "init": init, "channel": cs["channel"], "trend": "steady",
+                           "domains": list(p.get("domains", {}).keys()),
+                           "style": {"formality": formality, "len": cs["len"], "channel": cs["channel"],
+                                     "greet": cs["greet"] or "Hi", "signoff": cs["signoff"] or "Thanks,",
+                                     "emoji": cs["emoji"], "cadence": "—"}})
 
-    return {"todos": todos, "aware": aware, "projects": projects, "people": people}
+        commits = []
+        for c in store.list_commitments(conn, "open"):
+            level, label = commitments.sla(c["due"])
+            commits.append({"id": c["id"], "party": c["party"],
+                            "who": idx.get(c["counterpart"], _init(c["counterpart"])),
+                            "what": c["what"], "chan": c["channel"], "sla": [level, label],
+                            "cls": "overdue" if level == "red" else "soon" if level == "amber" else "",
+                            "ctx": "from thread"})
+
+    return {"todos": todos, "aware": aware, "projects": projects,
+            "people": people, "commitments": commits}
 
 
 def main():
