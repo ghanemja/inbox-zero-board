@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "prototype",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "4178", "--directory", "prototype"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["-e", "const http=require('http'),fs=require('fs'),p=require('path');http.createServer((q,s)=>{let f=p.join('prototype',decodeURIComponent(q.url.split('?')[0]));if(f.endsWith('/'))f+='index.html';if(!fs.existsSync(f)||fs.statSync(f).isDirectory())f=p.join('prototype','index.html');s.writeHead(200,{'content-type':f.endsWith('.json')?'application/json':'text/html'});fs.createReadStream(f).pipe(s)}).listen(4178)"],
       "port": 4178
     }
   ]
