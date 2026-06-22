@@ -286,7 +286,21 @@
   .reason,.sources{display:none}
   .commit{cursor:pointer}
   .commit .cm .meta{margin-left:0}
-  .subnav+#ins-pane-people.ins-grid{display:grid}
+  /* delegate: collapsed drafts, status as a dot */
+  .dtask{cursor:pointer;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:11px 14px;margin-bottom:8px}
+  .dtask:hover{border-color:var(--ink3)}
+  .dtask .drow{display:flex;align-items:center;gap:10px}
+  .sdot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+  .dt-task{font-weight:500;font-size:14px}
+  .dt-route{font-size:12px;color:var(--ink2);margin-top:2px}
+  .dt-status{font-size:11px;color:var(--ink2);white-space:nowrap}
+  .dtask .ddraft{display:none;margin-top:10px;padding:9px 11px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--ink2)}
+  .dtask.open .ddraft{display:block}
+  /* drawer: lighter meta + quiet secondary actions */
+  .dmeta .teamchip{border:0;background:transparent;padding:0;color:var(--ink2)}
+  .drawer-acts{display:flex;gap:16px;align-items:center;margin-top:4px}
+  .drawer-acts .lk{font-size:13px;color:var(--ink2);cursor:pointer}
+  .drawer-acts .lk:hover{color:var(--ink)}
 
   .hidden{display:none}
   footer{color:var(--ink3);font-size:11px;text-align:center;padding:18px}
@@ -773,25 +787,23 @@ function closeDrawer(){document.getElementById('drawer').classList.remove('open'
 function openTodo(id){
   const t=todos.find(x=>x.id===id);
   openDrawer(`<div class="dh">${t.title}</div>
-    <div class="dmeta">${ownerAv(t.owner)}<span style="font-size:13px">${ownerName(t.owner)}</span>
-      <span class="teamchip">${t.team}</span>${pill(t.pill)}</div>
+    <div class="dmeta">${chanDot(t.chan)}<span style="font-size:13px">${ownerName(t.owner)} · ${t.team}</span>${pill(t.pill)}</div>
     <div class="dsec"><div class="lab">Source email</div>
       <div class="email"><div class="ef">${t.from} — ${t.subj}</div>${t.body}</div></div>
     <div class="dsec"><div class="lab">Why this is a task</div><div class="why">${t.why.map(w=>`<span class="chip">${w}</span>`).join('')}</div></div>
     ${t.thread.length?`<div class="dsec"><div class="lab">Thread (${t.thread.length})</div>${t.thread.map(m=>`<div class="thread">${m}</div>`).join('')}</div>`:''}
-    <div class="dsec"><div class="lab">Actions</div><div class="dacts">
-      <button class="btn pri" onclick="completeTodo('${t.id}')">Mark done</button>
-      <button class="btn" onclick="closeDrawer()">Snooze</button>
-      <button class="btn" onclick="show('delegate');closeDrawer()">Delegate ↗</button>
-      <button class="btn" onclick="alert('Draft reply (prototype)')">Draft reply</button>
+    <div class="dsec"><div class="drawer-acts">
+      <button class="btn pri" style="width:auto" onclick="completeTodo('${t.id}')">Mark done</button>
+      <span class="lk" onclick="closeDrawer()">Snooze</span>
+      <span class="lk" onclick="show('delegate');closeDrawer()">Delegate ↗</span>
+      <span class="lk" onclick="alert('Draft reply (prototype)')">Draft reply</span>
     </div></div>`);
 }
 function completeTodo(id){const i=todos.findIndex(x=>x.id===id);if(i>=0)todos.splice(i,1);closeDrawer();renderBoard();}
 function openProj(id){
   const p=projects.find(x=>x.id===id);
   openDrawer(`<div class="dh">${p.t}</div>
-    <div class="dmeta">${ownerName(p.owner)==='You'?ownerAv('You'):''}<span style="font-size:13px">${ownerName(p.owner)}</span>
-      <span class="teamchip">${p.team}</span>${pill(p.status)}</div>
+    <div class="dmeta"><span style="font-size:13px">${ownerName(p.owner)} · ${p.team}</span>${pill(p.status)}</div>
     <div class="dsec"><div class="lab">Progress · ${p.pct}%</div><div class="bar"><div style="width:${p.pct}%"></div></div>
       <div style="font-size:12px;color:var(--ink2)">${p.s}</div></div>
     <div class="dsec"><div class="lab">Tasks</div>${p.tasks.map(t=>`<div class="subt">
@@ -866,23 +878,24 @@ function runTicket(){
   const pb=playbooks[goal], out=document.getElementById('delegate-out');
   if(!pb){out.innerHTML=`<div style="background:var(--surface);border:1px dashed var(--line);border-radius:var(--radius);padding:20px;text-align:center;color:var(--ink2)">No learned playbook for "<b>${goal}</b>" yet. In the real build, Gemma decomposes it on the fly and learns the routing after you send.<br><br>Try <b>create sponsor meeting</b>.</div>`;return;}
   let ready=0,detail=0,owner=0;
-  const rows=pb.subtasks.map(st=>{
+  const SDOT={ready:'#1d9e75',detail:'#b07012',owner:'#888780'};
+  const rows=pb.subtasks.map((st,i)=>{
     const p=st.who?peopleByInit[st.who]:null, missing=st.need.some(f=>f[1]==='?');
-    let status,scls;
-    if(!p){status='pick person';scls='gray';owner++;}
-    else if(missing){status='needs 1 detail';scls='amber';detail++;}
-    else{status='ready';scls='proj';ready++;}
-    const avatar=p?av(p.init,'m'):`<span class="av m" style="background:#888780">?</span>`;
-    const route=p?`→ ${p.n} (${p.r}) · ${st.evidence}`:`→ ${st.evidence}`;
+    let kind,status;
+    if(!p){kind='owner';status='pick person';owner++;}
+    else if(missing){kind='detail';status='needs 1 detail';detail++;}
+    else{kind='ready';status='ready';ready++;}
+    const route=p?`${p.n} · ${st.evidence}`:st.evidence;
     const need=st.need.map(f=>`<span style="color:${f[1]==='?'?'var(--amber-ink)':'var(--proj-ink)'}">${f[0]} ${f[1]==='?'?'— ask?':'✓'}</span>`).join(' · ');
-    const draft=st.draft?`<div style="margin-top:9px;padding:9px 11px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--ink2)">Needs: ${need}<p style="margin:6px 0 0;color:var(--ink)">"${st.draft.replace("[fill in]","<span style='background:var(--amber-bg);color:var(--amber-ink);padding:0 4px;border-radius:4px'>[fill in]</span>")}"</p></div>`:'';
-    const fl=(flashTask===st.task)?' flash':'';
-    return `<div class="dtask${fl}" data-task="${st.task}"><div style="display:flex;align-items:center;gap:10px">${avatar}
-        <div style="flex:1"><div style="font-weight:500">${st.task}</div><div style="font-size:12px;color:var(--ink2);margin-top:2px">${route}</div></div>
-        <span class="pill ${scls}" style="margin:0">${status}</span></div>${draft}</div>`;
+    const draft=st.draft?`<div class="ddraft">Needs: ${need}<p style="margin:6px 0 0;color:var(--ink)">"${st.draft.replace("[fill in]","<span style='background:var(--amber-bg);color:var(--amber-ink);padding:0 4px;border-radius:4px'>[fill in]</span>")}"</p></div>`:'';
+    const open=(flashTask===st.task)?' open':'';
+    return `<div class="dtask${open}" onclick="this.classList.toggle('open')">
+      <div class="drow"><span class="sdot" style="background:${SDOT[kind]}"></span>
+        <div style="flex:1"><div class="dt-task">${st.task}</div><div class="dt-route">${route}</div></div>
+        <span class="dt-status">${status}${st.draft?' ›':''}</span></div>${draft}</div>`;
   }).join('');
-  out.innerHTML=`<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);margin-bottom:12px"><span style="color:var(--accent)">⬡</span> Unpacked into ${pb.subtasks.length} asks<span style="font-size:11px;background:var(--accent-bg);color:var(--accent-ink);padding:2px 8px;border-radius:6px;margin-left:auto">learned from "${pb.learned}"</span></div>${rows}
-    <div style="display:flex;gap:10px;align-items:center;margin-top:14px"><button class="btn">Review &amp; send all</button><span style="font-size:12px;color:var(--ink2)">${ready} ready · ${detail} needs a detail · ${owner} needs an owner</span></div>`;
+  out.innerHTML=`<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);margin-bottom:12px">${pb.subtasks.length} asks · ${ready} ready · ${detail} need a detail${owner?` · ${owner} need an owner`:''}<span style="font-size:11px;color:var(--ink3);margin-left:auto">learned from "${pb.learned}"</span></div>${rows}
+    <div style="margin-top:14px"><button class="btn pri" style="width:auto">Review &amp; send all</button></div>`;
   flashTask=null;
 }
 
