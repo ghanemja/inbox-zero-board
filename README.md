@@ -1,74 +1,89 @@
-## Live demo
+# Inbox Zero Board
 
-GitHub Pages serves the clickable prototype with **seed data** (no real email), entirely in the browser:
-**https://ghanemja.github.io/inbox-zero-board/**
+Turn your inbox into a calm task board. Mail is read on your machine, sorted by a
+local model, and shown in a simple dashboard. Nothing is sent to any third party.
 
-## Getting Started
+**Live demo (fake data):** https://ghanemja.github.io/inbox-zero-board/ — login `admin` / `password`.
 
-If you have the **classic Outlook desktop app** signed in, this reads your inbox directly via [docs/windows-local-setup.md](docs/windows-local-setup.md).
+---
 
-### Installations
+## Setup (once)
 
-```bat
+> Mac uses `python3` and `/`. Windows uses `python` and `\`.
+
+```bash
 git clone https://github.com/ghanemja/inbox-zero-board
-cd inbox-zero-board\backend
-python -m venv .venv && .venv\Scripts\activate
-pip install -r requirements.txt
-ollama pull gemma3:4b          REM local model (install Ollama from https://ollama.com first)
+cd inbox-zero-board/backend
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+python3 -m pip install -r requirements.txt
 ```
 
-### Initial Ingestion Run
+Optional but recommended for good sorting — install [Ollama](https://ollama.com), then:
+```bash
+ollama pull gemma3:4b
+```
+(Skip it and add `--no-gemma` to the commands below for a quick first run; sorting is rougher.)
 
-```bat
-REM from backend\, venv active. --me auto-detects the signed-in Outlook account.
-python scripts\run_ingest.py --source outlook-local --days 30 --limit 3000
-python scripts\export_ui.py --out ..\prototype\data.json
+---
+
+## Step 1 — get your email in
+
+Pick **one** source that fits your setup. Run from the `backend/` folder with the venv active.
+Replace `YOUR_EMAIL` with your address.
+
+### A. Manual export — works everywhere, fully offline (recommended)
+No accounts, no network, no IT. You export your own mail, the tool reads the files.
+
+1. Make a folder, e.g. `~/Desktop/mail-export`.
+2. In Outlook, select messages → **drag them onto that folder** (each becomes a `.eml` file).
+3. Run:
+```bash
+python3 scripts/run_ingest.py --source files --path ~/Desktop/mail-export --me YOUR_EMAIL --no-gemma
 ```
 
-### Run the UI
-
-```bat
-cd ..\prototype
-python -m http.server 4178
-REM open http://localhost:4178/  → log in
+### B. Personal Gmail
+Enable IMAP in Gmail, make an [App Password](https://support.google.com/accounts/answer/185833), put
+`IMAP_USER` / `IMAP_PASS` in `backend/.env` (copy from `.env.example`), then:
+```bash
+python3 scripts/run_ingest.py --source imap --days 30 --me YOUR_EMAIL --no-gemma
 ```
 
-The ingest+export writes `prototype\data.json`; the UI reads it. They're decoupled — the
-dashboard always shows the latest export. Leave the UI server running; re-run ingest+export
-(then reload the page) to refresh.
-
-### History backfill (optional, once) — years of relationship graph, cheap
-
-```bat
-python scripts\run_ingest.py --source outlook-local --backfill --limit 50000
-```
-Builds the graph / comm-style / commitments from your whole archive **without** per-email
-Gemma. Minutes, not hours. Run it overnight after the first demo.
-
-### Keep it running (recurring)
-
-Two pieces: a scheduled **data refresh**, and the **UI server** staying up.
-
-```bat
-REM data refresh — hourly. backend\scripts\run_local.bat does ingest + export.
-schtasks /Create /SC HOURLY /TN "InboxZero" ^
-  /TR "C:\path\to\inbox-zero-board\backend\scripts\run_local.bat"
-
-REM UI server — start at logon so the dashboard is always available:
-schtasks /Create /SC ONLOGON /TN "InboxZeroUI" ^
-  /TR "cmd /c cd /d C:\path\to\inbox-zero-board\prototype && python -m http.server 4178"
+### C. Classic Outlook desktop on **Windows**
+Outlook open + signed in (classic, not "New Outlook"):
+```bash
+python scripts\run_ingest.py --source outlook-local --days 30 --limit 3000 --me YOUR_EMAIL --no-gemma
 ```
 
-Each scheduled run only processes **new** mail (seen mail is skipped; the graph never
-double-counts), so runs stay fast. Outlook must be open when the refresh runs.
+### D. Work / Microsoft 365 mailbox (needs IT)
+Programmatic access to a managed mailbox is controlled by your organization. Ask IT to register
+an app (or consent Mail.Read), then use `--source outlook`. See [docs/outlook-setup.md](docs/outlook-setup.md).
+Don't try to bypass an org block — use the manual-export path (A) instead.
 
-> Mac / headless / non-Windows? Use the Microsoft Graph path instead: [docs/outlook-setup.md](docs/outlook-setup.md).
+---
 
-## Privacy
+## Step 2 — see it
 
-Local-first by design: mail bodies stay in an on-device SQLite file (`backend/inboxzero.db`),
-classification runs on a local model, every decision logs its reasoning + confidence, and
-low-confidence items go to a review lane rather than being auto-acted. With the desktop-Outlook
-+ local-Gemma path there is **zero email egress** (verifiable by air-gapping after the model is
-pulled). `inboxzero.db` and `prototype/data.json` hold real mail and are gitignored — **never
-commit or push them**; the hosted demo stays seed-only.
+```bash
+python3 scripts/export_ui.py --out ../prototype/data.json
+cd ../prototype
+python3 -m http.server 4178
+```
+Open **http://localhost:4178/** → log in (`admin` / `password`).
+
+Step 1 writes your data into `prototype/data.json`; the UI reads it. To refresh: re-run Step 1
+(without `--no-gemma` once Ollama is set up) + the export, then reload the page.
+
+---
+
+## Privacy & cleanup
+
+- Your mail is copied into a local file: `backend/inboxzero.db`. It stays on your machine —
+  not sent to any third party. (The `files`/`outlook-local` paths make **no** network calls at all.)
+- It's a plain SQLite file (relies on your disk encryption). To wipe everything:
+  ```bash
+  rm backend/inboxzero.db prototype/data.json
+  ```
+- **Never commit `inboxzero.db` or `prototype/data.json`** — they hold real mail and are gitignored.
+- Using a **work** mailbox? Whether company mail belongs in a local tool is your org's policy
+  call. The manual-export path keeps it offline, but it's still a local copy — check with IT if unsure.
