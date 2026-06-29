@@ -44,14 +44,16 @@ def _to_dict(msg, fallback_id: str) -> dict:
 
 def _iter_messages(path: str):
     if os.path.isdir(path):
-        for name in os.listdir(path):
-            if name.lower().endswith((".eml", ".txt")):
-                fp = os.path.join(path, name)
-                try:
-                    with open(fp, "rb") as f:
-                        yield email.message_from_bytes(f.read()), name
-                except Exception:
-                    continue
+        # walk subfolders too, so a top-level folder with inbox/ and sent/ both load
+        for root, _dirs, names in os.walk(path):
+            for name in names:
+                if name.lower().endswith((".eml", ".txt")):
+                    fp = os.path.join(root, name)
+                    try:
+                        with open(fp, "rb") as f:
+                            yield email.message_from_bytes(f.read()), os.path.relpath(fp, path)
+                    except Exception:
+                        continue
     elif path.lower().endswith(".mbox") or os.path.isfile(path):
         box = mailbox.mbox(path)
         for i, msg in enumerate(box):

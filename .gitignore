@@ -8,3 +8,7 @@ __pycache__/
 prototype/data.json
 .token_cache.json
 backend/.token_cache.json
+# real exported mail — never commit
+data/
+*.eml
+*.mbox
