@@ -22,9 +22,10 @@ DEFAULT_ME = "you@acme.com"
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--source", choices=["db", "outlook", "outlook-local", "outlook-mac", "imap"], default="db")
+    ap.add_argument("--source", choices=["db", "outlook", "outlook-local", "outlook-mac", "imap", "files"], default="db")
     ap.add_argument("--limit", type=int, default=100)
     ap.add_argument("--me", default=os.getenv("ME", DEFAULT_ME))
+    ap.add_argument("--path", help="for --source files: folder of .eml files, or a .mbox archive")
     ap.add_argument("--no-gemma", action="store_true")
     ap.add_argument("--days", type=int, help="only pull mail from the last N days (fast first-run scope)")
     ap.add_argument("--since", help="only pull mail on/after YYYY-MM-DD (overrides --days)")
@@ -48,7 +49,7 @@ def main():
     if since:
         print(f"Scope: mail since {since}")
     counts = pipeline.run(args.me, source=args.source, limit=args.limit, use_gemma=not args.no_gemma,
-                          since=since, reclassify=args.reclassify, backfill=args.backfill)
+                          since=since, reclassify=args.reclassify, backfill=args.backfill, path=args.path)
     print("Classified:")
     for board, n in sorted(counts.items(), key=lambda kv: -kv[1]):
         print(f"  {board:14} {n}")

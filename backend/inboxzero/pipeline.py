@@ -19,7 +19,8 @@ from . import store, classify, profiles, commitments
 
 
 def run(me: str, source: str = "db", limit: int = 100, use_gemma: bool = True,
-        since: str | None = None, reclassify: bool = False, backfill: bool = False):
+        since: str | None = None, reclassify: bool = False, backfill: bool = False,
+        path: str | None = None):
     store.init()
     with store.db() as conn:
         if source == "outlook":
@@ -38,6 +39,10 @@ def run(me: str, source: str = "db", limit: int = 100, use_gemma: bool = True,
         elif source == "imap":
             from . import imap_client  # lazy — direct IMAP (Gmail / any), stdlib only
             for e in imap_client.fetch_messages(limit, since=since):
+                store.upsert_email(conn, e)
+        elif source == "files":
+            from . import files_client  # lazy — manual export (.eml folder / .mbox), offline
+            for e in files_client.fetch_messages(limit, since=since, path=path):
                 store.upsert_email(conn, e)
 
         done = {r["email_id"] for r in conn.execute("SELECT email_id FROM classifications")}
