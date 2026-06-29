@@ -32,7 +32,15 @@ def main():
     ap.add_argument("--backfill", action="store_true",
                     help="metadata-only history pass: build the graph/profiles without per-email Gemma")
     ap.add_argument("--reclassify", action="store_true", help="re-run classification on already-seen mail")
+    ap.add_argument("--fresh", action="store_true",
+                    help="wipe the local DB first and rebuild from scratch (use after fixing classification)")
     args = ap.parse_args()
+
+    if args.fresh:
+        from inboxzero import store
+        if os.path.exists(store.DB_PATH):
+            os.remove(store.DB_PATH)
+            print(f"Fresh start: removed {store.DB_PATH}")
 
     since = args.since
     if not since and args.days:
