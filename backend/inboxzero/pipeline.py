@@ -61,6 +61,7 @@ def run(me: str, source: str = "db", limit: int = 100, use_gemma: bool = True,
         done = {r["email_id"] for r in conn.execute("SELECT email_id FROM classifications")}
         counts: dict[str, int] = {}
         layers: dict[str, int] = {}
+        _first_gemma_err = None
         for e in store.iter_emails(conn):
             already = e["id"] in done
             if already and not reclassify:
@@ -75,13 +76,17 @@ def run(me: str, source: str = "db", limit: int = 100, use_gemma: bool = True,
                 _record_interaction(conn, e, me)
             counts[result["board"]] = counts.get(result["board"], 0) + 1
             layers[result.get("layer", "?")] = layers.get(result.get("layer", "?"), 0) + 1
+            if result.get("layer") == "gemma_error" and _first_gemma_err is None:
+                _first_gemma_err = result.get("reasoning", "")
 
     # how each email was decided — so you can SEE whether Gemma ran
     if any(layers.values()):
         print("Decided by:", ", ".join(f"{k}={v}" for k, v in sorted(layers.items())))
     if use_gemma and not backfill and layers.get("gemma_error"):
-        print(f"[gemma] WARNING: {layers['gemma_error']} email(s) fell back because Gemma failed — "
-              "these are rough. Fix Ollama (see the [gemma] line above) and re-run with --reclassify.")
+        print(f"[gemma] WARNING: {layers['gemma_error']} email(s) fell back because Gemma failed.")
+        if _first_gemma_err:
+            print(f"[gemma] actual error: {_first_gemma_err}")
+        print("[gemma] Fix it, then re-run with --reclassify.")
     return counts
 
 

@@ -38,6 +38,11 @@ and pull any concrete details into `slots` (date, headcount, budget_code, dietar
 If the SENDER is asking the owner to supply specific details, list those in `asked_for`.
 Give a one-sentence `reasoning` and a 0-1 `confidence`. Never invent a deadline that isn't stated.
 
+Respond with ONLY a JSON object, no prose, with these keys:
+{{"board": "todo|awareness|project|archive", "task": string|null, "due": string|null,
+ "topics": [string], "request_type": string|null, "slots": {{}}, "asked_for": [string],
+ "reasoning": string, "confidence": number}}
+
 FROM: {frm}
 TO: {to}
 CC: {cc}
@@ -95,13 +100,29 @@ def warmup() -> tuple[bool, str]:
     import requests
     try:
         t = time.time()
-        requests.post(f"{OLLAMA_HOST}/api/generate",
-                      json={"model": resolve_model(), "prompt": "ok", "stream": False,
-                            "keep_alive": OLLAMA_KEEP_ALIVE, "options": {"num_predict": 1}},
-                      timeout=OLLAMA_TIMEOUT)
+        r = requests.post(f"{OLLAMA_HOST}/api/generate",
+                          json={"model": resolve_model(), "prompt": "ok", "stream": False,
+                                "keep_alive": OLLAMA_KEEP_ALIVE, "options": {"num_predict": 1}},
+                          timeout=OLLAMA_TIMEOUT)
+        r.raise_for_status()
         return True, f"model warm ({time.time() - t:.0f}s to load)"
     except Exception as e:
         return False, f"warmup failed ({e})"
+
+
+def _parse_json(text: str) -> dict:
+    """Tolerant: parse the model's response, or recover the first {...} object."""
+    text = (text or "").strip()
+    try:
+        return json.loads(text)
+    except Exception:
+        i, j = text.find("{"), text.rfind("}")
+        if i != -1 and j > i:
+            try:
+                return json.loads(text[i:j + 1])
+            except Exception:
+                pass
+    raise ValueError(f"unparseable model output: {text[:120]!r}")
 
 
 def classify(email: dict, me: str) -> dict:
@@ -113,13 +134,17 @@ def classify(email: dict, me: str) -> dict:
     )
     resp = requests.post(
         f"{OLLAMA_HOST}/api/generate",
+        # "json" mode (not a strict schema) — far more compatible across Ollama
+        # versions/models and faster than schema-constrained decoding.
         json={"model": resolve_model(), "prompt": prompt, "stream": False,
-              "format": CLASSIFY_SCHEMA, "keep_alive": OLLAMA_KEEP_ALIVE,
+              "format": "json", "keep_alive": OLLAMA_KEEP_ALIVE,
               "options": {"temperature": 0, "num_predict": 300}},
         timeout=OLLAMA_TIMEOUT,
     )
     resp.raise_for_status()
-    data = json.loads(resp.json()["response"])
+    data = _parse_json(resp.json().get("response", ""))
+    if "board" not in data:
+        raise ValueError(f"model did not return a board (got keys {list(data)})")
     data.setdefault("task", None)
     data.setdefault("due", None)
     data.setdefault("topics", [])
