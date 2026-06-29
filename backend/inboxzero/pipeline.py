@@ -31,6 +31,14 @@ def run(me: str, source: str = "db", limit: int = 100, use_gemma: bool = True,
             from . import outlook_local  # lazy — Windows + pywin32 only
             for e in outlook_local.fetch_messages(limit, since=since):
                 store.upsert_email(conn, e)
+        elif source == "outlook-mac":
+            from . import outlook_mac  # lazy — macOS + classic Outlook via AppleScript
+            for e in outlook_mac.fetch_messages(limit, since=since):
+                store.upsert_email(conn, e)
+        elif source == "imap":
+            from . import imap_client  # lazy — direct IMAP (Gmail / any), stdlib only
+            for e in imap_client.fetch_messages(limit, since=since):
+                store.upsert_email(conn, e)
 
         done = {r["email_id"] for r in conn.execute("SELECT email_id FROM classifications")}
         counts: dict[str, int] = {}

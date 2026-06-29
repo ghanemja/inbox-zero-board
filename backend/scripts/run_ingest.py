@@ -22,7 +22,7 @@ DEFAULT_ME = "you@acme.com"
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--source", choices=["db", "outlook", "outlook-local"], default="db")
+    ap.add_argument("--source", choices=["db", "outlook", "outlook-local", "outlook-mac", "imap"], default="db")
     ap.add_argument("--limit", type=int, default=100)
     ap.add_argument("--me", default=os.getenv("ME", DEFAULT_ME))
     ap.add_argument("--no-gemma", action="store_true")
@@ -37,11 +37,13 @@ def main():
     if not since and args.days:
         since = (datetime.now(timezone.utc) - timedelta(days=args.days)).strftime("%Y-%m-%d")
 
-    # local desktop Outlook: auto-detect the signed-in account as `me`
-    if args.source == "outlook-local" and args.me == DEFAULT_ME:
-        from inboxzero import outlook_local
-        args.me = outlook_local.current_user_smtp() or args.me
-        print(f"Using signed-in Outlook account: {args.me}")
+    # desktop Outlook / IMAP: auto-detect the account as `me`
+    _autodetect = {"outlook-local": "inboxzero.outlook_local",
+                   "outlook-mac": "inboxzero.outlook_mac", "imap": "inboxzero.imap_client"}
+    if args.source in _autodetect and args.me == DEFAULT_ME:
+        mod = __import__(_autodetect[args.source], fromlist=["current_user_smtp"])
+        args.me = mod.current_user_smtp() or args.me
+        print(f"Using account: {args.me}")
 
     if since:
         print(f"Scope: mail since {since}")
