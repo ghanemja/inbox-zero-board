@@ -165,7 +165,11 @@ def classify(email: dict, me: str) -> dict:
     data.setdefault("slots", {})
     data.setdefault("asked_for", [])
     data.setdefault("reasoning", "classified by gemma")
-    data.setdefault("confidence", 0.7)   # model gave a board but omitted a score → trust it
+    data.setdefault("confidence", 0.7)
+    try:
+        data["confidence"] = float(data["confidence"] or 0.7)
+    except (TypeError, ValueError):
+        data["confidence"] = 0.7
     # guard: model may return null for list/dict fields
     if not isinstance(data.get("topics"), list):
         data["topics"] = []

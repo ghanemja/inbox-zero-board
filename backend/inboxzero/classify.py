@@ -26,10 +26,14 @@ def classify_email(email: dict, me: str, use_gemma: bool = True) -> dict:
         else:
             result = _review("ambiguous, no gemma")
 
-    # confidence gate — never auto-act on low confidence
-    if result.get("confidence", 0) < CONFIDENCE_THRESHOLD and result.get("board") != "awareness":
+    # confidence gate — coerce to float first (model may return "0.8" as a string)
+    try:
+        result["confidence"] = float(result.get("confidence", 0) or 0)
+    except (TypeError, ValueError):
+        result["confidence"] = 0.0
+    if result["confidence"] < CONFIDENCE_THRESHOLD and result.get("board") != "awareness":
         result["board"] = "needs_review"
-        result["reasoning"] = f"low confidence ({result.get('confidence', 0):.2f}) — {result.get('reasoning', '')}"
+        result["reasoning"] = f"low confidence ({result['confidence']:.2f}) — {result.get('reasoning', '')}"
 
     result["email_id"] = email["id"]
     result["decided_at"] = datetime.now(timezone.utc).isoformat()
