@@ -1,40 +1,13 @@
-# Inbox Zero Board
-
-Turn an Outlook inbox into a calm, organized workspace — not a pile of mail. Local-first:
-mail is read on-device, classified by a local model, and nothing leaves the machine.
-
-**Tabs**
-
-- **Today** — the calm landing: what needs you now (top tasks by due date), overdue commitments, team health, one insight. A digest, not another inbox.
-- **Board** — every email sorted into **To-Do** (action required), **Awareness** (cc'd/FYI, clear when seen), **Projects** (related threads auto-grouped).
-- **Commitments** — who owes whom, both ways, with SLA timers; resolve / snooze / nudge.
-- **Delegate** — file a ticket → it routes the implied asks to the right people with the details they need, learned from past threads.
-- **Insights** — relationship graph + per-person communication style, topic share, and an opt-in, behavioral-only relationship-health view.
-
 ## Live demo
 
 GitHub Pages serves the clickable prototype with **seed data** (no real email), entirely in the browser:
 **https://ghanemja.github.io/inbox-zero-board/**
 
-Login is a **cosmetic demo gate** (`admin` / `password`) — not real security (static site; the
-value is in the page source). Do not put real data behind it.
+## Getting Started
 
-## Repo layout
+If you have the **classic Outlook desktop app** signed in, this reads your inbox directly via [docs/windows-local-setup.md](docs/windows-local-setup.md).
 
-| Path | What |
-|---|---|
-| `prototype/` | Self-contained UI (no build, no CDN). What Pages hosts; also the local dashboard. |
-| `backend/` | Local engine: Outlook → SQLite → rules + local Gemma (Ollama) → boards, profiles, commitments, graph. |
-| `docs/` | [learning-logic](docs/learning-logic.md), [roadmap](docs/roadmap.md), [windows-local-setup](docs/windows-local-setup.md), [outlook-setup](docs/outlook-setup.md) |
-
----
-
-## Run it on your real inbox (Windows, no Azure)
-
-If you have the **classic Outlook desktop app** signed in, this reads your inbox directly via
-COM — no app registration, no cloud token. Full guide: [docs/windows-local-setup.md](docs/windows-local-setup.md).
-
-### One-time setup
+### Installations
 
 ```bat
 git clone https://github.com/ghanemja/inbox-zero-board
@@ -44,7 +17,7 @@ pip install -r requirements.txt
 ollama pull gemma3:4b          REM local model (install Ollama from https://ollama.com first)
 ```
 
-### First run — recent window (fast)
+### Initial Ingestion Run
 
 ```bat
 REM from backend\, venv active. --me auto-detects the signed-in Outlook account.
@@ -90,8 +63,6 @@ Each scheduled run only processes **new** mail (seen mail is skipped; the graph 
 double-counts), so runs stay fast. Outlook must be open when the refresh runs.
 
 > Mac / headless / non-Windows? Use the Microsoft Graph path instead: [docs/outlook-setup.md](docs/outlook-setup.md).
-
----
 
 ## Privacy
 
