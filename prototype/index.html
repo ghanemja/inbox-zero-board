@@ -286,6 +286,7 @@
   .reason,.sources{display:none}
   .commit{cursor:pointer}
   .commit .cm .meta{margin-left:0}
+  .owetag{font-size:10px;padding:1px 7px;border-radius:6px;background:var(--todo-bg);color:var(--todo-ink);white-space:nowrap}
   /* delegate: collapsed drafts, status as a dot */
   .dtask{cursor:pointer;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:11px 14px;margin-bottom:8px}
   .dtask:hover{border-color:var(--ink3)}
@@ -340,7 +341,7 @@
   <nav>
     <button id="nav-today" class="on" onclick="show('today')">Today</button>
     <button id="nav-board" onclick="show('board')">Board</button>
-    <button id="nav-commit" onclick="show('commit')">Commitments</button>
+    <button id="nav-commit" onclick="show('commit')">Waiting on</button>
     <button id="nav-delegate" onclick="show('delegate')">Delegate</button>
     <button id="nav-ins" onclick="show('ins')">Insights</button>
   </nav>
@@ -355,7 +356,7 @@
     <div id="today-teams" class="teamstrip"></div>
     <div class="seclabel">Do next</div>
     <div id="today-todos"></div>
-    <div class="seclabel">Overdue commitments</div>
+    <div class="seclabel">Waiting on others</div>
     <div id="today-commit" class="quietcard"></div>
     <div id="today-insight"></div>
     <div id="today-aware" class="foldrow"></div>
@@ -371,14 +372,12 @@
     </div>
   </section>
 
-  <!-- COMMITMENTS (chief of staff) -->
+  <!-- WAITING ON (accountability ledger — what others owe you) -->
   <section id="view-commit" class="hidden">
+    <div class="viewhead">What you're waiting on from other people. Things you owe live on the board as tasks.</div>
     <div id="commit-head" class="viewhead"></div>
     <div class="cfilter" id="commit-filter"></div>
-    <div class="commit-grid">
-      <div><div class="seclabel">They owe you</div><div id="commit-them"></div></div>
-      <div><div class="seclabel">You owe them</div><div id="commit-you"></div></div>
-    </div>
+    <div id="commit-them"></div>
   </section>
 
   <!-- DELEGATE -->
@@ -524,11 +523,6 @@ const todos=[
    body:"Hi — legal cleared the redlines this morning. Attaching the final NDA for your signature; we need it back before the Acme kickoff tomorrow. Let me know if anything looks off.",
    why:['addressed to you','asks a question','deadline detected'],
    thread:['Jun 9 — you: "can legal take a pass?"','Jun 12 — Sarah: "redlines attached"','Jun 14 — Sarah: "final, please sign"']},
-  {id:'t2',cls:'soon',title:'Reply with travel dates for the offsite',owner:'You',team:'Ops',due:'Fri',pill:['amber','Fri'],
-   from:'Tom Klein <tom@acme>',subj:'Offsite travel — need your dates',
-   body:"Booking flights for the Q3 offsite. Can you send your preferred travel dates by end of week so I can lock fares?",
-   why:['addressed to you','deadline detected'],
-   thread:['Jun 13 — Tom: "offsite is Aug 5-7"','Jun 14 — Tom: "need dates EOW"']},
   {id:'t3',cls:'todo',title:'Review the Q3 budget draft',owner:'You',team:'Finance',due:'no date',pill:['gray','no date'],
    from:'finance@acme',subj:'Q3 budget — draft for review',
    body:"Draft Q3 budget attached (2 files). Flagged the marketing line for your input. No hard deadline but earlier is better.",
@@ -691,7 +685,7 @@ function renderBoard(){
     `<h2><span class="k" style="background:var(--todo)"></span>To-Do <span class="c">action required</span><span class="cnt">${ft.length}</span></h2>`+
     (ft.map(t=>`<div class="card ${t.cls}" onclick="openTodo('${t.id}')">
         <div class="title">${t.title}</div>
-        <div class="row">${chanDot(t.chan)}<span class="meta">${ownerName(t.owner)} · ${t.team}</span>${pill(t.pill)}</div>
+        <div class="row">${chanDot(t.chan)}<span class="meta">${ownerName(t.owner)} · ${t.team}</span>${t.owe?`<span class="owetag">↩ owe ${t.owe}</span>`:''}${pill(t.pill)}</div>
       </div>`).join('')||emptyMsg());
 
   const open=aware.filter(a=>!a.done).length, total=aware.length, pctAck=Math.round((total-open)/total*100);
@@ -748,9 +742,10 @@ function commitAct(id,act,ev){
 }
 function renderCommit(){
   const open=commitments.filter(c=>c.status!=='done');
-  const over=open.filter(c=>c.cls==='overdue').length;
+  const waiting=open.filter(c=>c.party==='them');
+  const over=waiting.filter(c=>c.cls==='overdue').length;
   document.getElementById('commit-head').innerHTML=
-    `${open.filter(c=>c.party==='them').length} owed to you · ${open.filter(c=>c.party==='you').length} you owe · <span style="color:var(--red)">${over} overdue</span>`;
+    `${waiting.length} waiting on others · <span style="color:var(--red)">${over} overdue</span>`;
   const fbtn=(f,lbl)=>`<button class="${commitFilter===f?'on':''}" onclick="setCommitFilter('${f}')">${lbl}</button>`;
   document.getElementById('commit-filter').innerHTML=fbtn('open','Open')+fbtn('overdue','Overdue')+fbtn('done','Resolved');
   const row=c=>{const p=peopleByInit[c.who],nm=p?p.n:c.who, done=c.status==='done', exp=commitOpen===c.id;
@@ -758,16 +753,15 @@ function renderCommit(){
       <div class="ct">${c.what}</div>
       <div class="cm">${chanDot(c.chan)}<span class="meta">${nm} · ${c.ctx}</span><span class="sla ${done?'ok':c.sla[0]}">${done?'resolved':c.sla[1]}</span></div>
       ${done||!exp?'':`<div class="cact" onclick="event.stopPropagation()">
-        <button class="pri" onclick="commitAct('${c.id}','nudge',event)">${c.nudged?'✓ '+(c.party==='them'?'nudged':'drafted'):(c.party==='them'?'Send nudge':'Draft reply')}</button>
+        <button class="pri" onclick="commitAct('${c.id}','nudge',event)">${c.nudged?'✓ nudged':'Send nudge'}</button>
         <button onclick="commitAct('${c.id}','snooze',event)">Snooze 3d</button>
-        <button onclick="commitAct('${c.id}','done',event)">Resolve</button>
+        <button onclick="commitAct('${c.id}','done',event)">Got it</button>
         <span class="src" onclick="alert('Opens the source ${c.chan} thread (prototype)')">view source ↗</span>
       </div>`}
     </div>`;};
+  // Commitments = "they owe you" only. "You owe them" lives on the board as tasks.
   const them=commitments.filter(c=>c.party==='them'&&commitMatch(c));
-  const you=commitments.filter(c=>c.party==='you'&&commitMatch(c));
-  document.getElementById('commit-them').innerHTML=them.map(row).join('')||'<div class="health-empty">Nothing here</div>';
-  document.getElementById('commit-you').innerHTML=you.map(row).join('')||'<div class="health-empty">Nothing here</div>';
+  document.getElementById('commit-them').innerHTML=them.map(row).join('')||'<div class="health-empty">Not waiting on anyone — all clear.</div>';
 }
 
 /* ---------- awareness actions ---------- */
@@ -799,7 +793,23 @@ function openTodo(id){
       <span class="lk" onclick="alert('Draft reply (prototype)')">Draft reply</span>
     </div></div>`);
 }
-function completeTodo(id){const i=todos.findIndex(x=>x.id===id);if(i>=0)todos.splice(i,1);closeDrawer();renderBoard();}
+function completeTodo(id){
+  const t=todos.find(x=>x.id===id);
+  if(t&&t._cid){const c=commitments.find(x=>x.id===t._cid);if(c)c.status='done';}  // resolve the underlying "you owe" commitment
+  const i=todos.findIndex(x=>x.id===id);if(i>=0)todos.splice(i,1);
+  closeDrawer();renderBoard();
+}
+// "You owe them" commitments surface as To-Do cards (tagged), not a duplicate ledger lane.
+function mergeOweTodos(){
+  commitments.filter(c=>c.party==='you'&&c.status!=='done').forEach(c=>{
+    if(todos.some(t=>t.id==='owe-'+c.id))return;
+    const nm=peopleByInit[c.who]?.n||c.who, pc=c.sla[0]==='red'?'red':c.sla[0]==='amber'?'amber':'gray';
+    todos.unshift({id:'owe-'+c.id, _cid:c.id, owe:nm, cls:c.cls==='overdue'?'due':c.cls==='soon'?'soon':'todo',
+      title:c.what, owner:'You', team:peopleByInit[c.who]?.team||'Inbox', chan:c.chan,
+      due:c.sla[1], pill:[pc, c.sla[1]], from:`(you owe ${nm})`, subj:c.what,
+      body:`You promised ${nm}: ${c.what}. ${c.ctx}.`, why:[`you owe ${nm}`, c.ctx], thread:[]});
+  });
+}
 function openProj(id){
   const p=projects.find(x=>x.id===id);
   openDrawer(`<div class="dh">${p.t}</div>
@@ -839,18 +849,21 @@ const HCOL={risk:'#a32d2d',warn:'#b07012',ok:'#1d9e75'};
 const dueRank=t=>t.cls==='due'?0:t.cls==='soon'?1:2;
 function renderToday(){
   const ft=todos.filter(inScope);
-  const needs=ft.length, over=commitments.filter(c=>c.cls==='overdue'&&c.status!=='done'), skim=aware.filter(a=>!a.done).length;
+  // "you owe" already merged into todos; waiting = only what OTHERS owe you
+  const waiting=commitments.filter(c=>c.party==='them'&&c.status!=='done').sort((a,b)=>(a.cls==='overdue'?0:1)-(b.cls==='overdue'?0:1));
+  const overOthers=waiting.filter(c=>c.cls==='overdue').length;
+  const needs=ft.length, skim=aware.filter(a=>!a.done).length;
   document.getElementById('today-head').innerHTML=
-    `<div class="greet">Welcome back</div><div class="gsub"><span style="color:var(--accent)">${needs} thing${needs===1?'':'s'} need you</span> · ${over.length} commitment${over.length===1?'':'s'} overdue · ${skim} to skim</div>`;
+    `<div class="greet">Welcome back</div><div class="gsub"><span style="color:var(--accent)">${needs} thing${needs===1?'':'s'} need you</span> · ${overOthers} overdue from others · ${skim} to skim</div>`;
   document.getElementById('today-teams').innerHTML=
     `<span class="lbl">Teams</span>`+teams().map(tm=>`<span class="tchip" onclick="setScope('${tm}');show('board')">${tm}<span class="doth" style="background:${HCOL[teamHealth(tm)]}"></span></span>`).join('');
   const top=[...ft].sort((a,b)=>dueRank(a)-dueRank(b)).slice(0,3);
   document.getElementById('today-todos').innerHTML=top.map(t=>`<div class="slim ${t.cls}" onclick="openTodo('${t.id}')">
       <div class="t1"><span class="ti">${t.title}</span><span class="du">${t.pill[1]}</span></div>
-      <div class="s2">${chanDot(t.chan)}${ownerName(t.owner)} · ${t.team}</div></div>`).join('')||emptyMsg();
-  document.getElementById('today-commit').innerHTML=over.length?over.map(c=>{const p=peopleByInit[c.who],nm=p?p.n.split(' ')[0]:c.who;
-      return `<div class="qrow"><span class="what">${c.party==='them'?nm+' owes you':'You owe '+nm}: ${c.what}</span><span class="age">${c.sla[1]}</span><span class="act" onclick="show('commit')">${c.party==='them'?'nudge':'reply'}</span></div>`;}).join('')
-    :`<div class="qrow"><span class="what" style="color:var(--ink3)">Nothing overdue — you're clear.</span></div>`;
+      <div class="s2">${chanDot(t.chan)}${ownerName(t.owner)} · ${t.team}${t.owe?` · ↩ owe ${t.owe}`:''}</div></div>`).join('')||emptyMsg();
+  document.getElementById('today-commit').innerHTML=waiting.length?waiting.slice(0,4).map(c=>{const p=peopleByInit[c.who],nm=p?p.n.split(' ')[0]:c.who;
+      return `<div class="qrow"><span class="what">${nm} owes you: ${c.what}</span><span class="age" style="color:${c.cls==='overdue'?'var(--red)':'var(--ink2)'}">${c.sla[1]}</span><span class="act" onclick="show('commit')">nudge</span></div>`;}).join('')
+    :`<div class="qrow"><span class="what" style="color:var(--ink3)">Not waiting on anyone — all clear.</span></div>`;
   document.getElementById('today-insight').innerHTML=insights.length?
     `<div class="todayinsight"><span style="color:var(--accent)">◆</span><span>${insights[0][3]}</span></div>`:'';
   document.getElementById('today-aware').innerHTML=
@@ -1053,6 +1066,7 @@ async function boot(){
       if(d.commitments&&d.commitments.length) commitments.splice(0,commitments.length,...d.commitments);
     }
   }catch(e){/* no data.json on static host → keep demo seed */}
+  mergeOweTodos();
   renderScope();renderToday();
 }
 boot();
