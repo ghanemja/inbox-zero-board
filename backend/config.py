@@ -7,8 +7,11 @@ try:
 except ImportError:
     pass  # .env optional; env vars / defaults still work (stdlib-only smoke test)
 
-AZURE_CLIENT_ID = os.getenv("AZURE_CLIENT_ID", "")
-AZURE_TENANT_ID = os.getenv("AZURE_TENANT_ID", "common")
+# Default to Microsoft's PUBLIC "Microsoft Graph Command Line Tools" client — the same
+# first-party app Graph PowerShell uses. Lets you sign in + consent with NO app
+# registration / no Azure portal. Override AZURE_CLIENT_ID in .env to use your own app.
+AZURE_CLIENT_ID = os.getenv("AZURE_CLIENT_ID", "14d82eec-204b-4c2f-b7e8-296a70dab67e")
+AZURE_TENANT_ID = os.getenv("AZURE_TENANT_ID", "organizations")  # work/school accounts
 GRAPH_SCOPES = ["Mail.Read"]  # read-only by design
 # MSAL token cache on disk → no re-login each run. Holds refresh tokens; gitignored.
 TOKEN_CACHE = os.getenv("TOKEN_CACHE", os.path.join(os.path.dirname(__file__), ".token_cache.json"))
