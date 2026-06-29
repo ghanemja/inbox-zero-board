@@ -151,6 +151,8 @@ def classify(email: dict, me: str) -> dict:
     data.setdefault("request_type", None)
     data.setdefault("slots", {})
     data.setdefault("asked_for", [])
+    data.setdefault("reasoning", "classified by gemma")
+    data.setdefault("confidence", 0.7)   # model gave a board but omitted a score → trust it
     data["layer"] = "gemma"
     data["project_key"] = None  # set later by playbooks clustering
     return data
