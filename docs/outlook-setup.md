@@ -4,6 +4,11 @@ Read-only (`Mail.Read`), local-first. Mail is pulled to an on-device SQLite file
 classified by local Gemma, and shown in the prototype UI. Nothing is sent; nothing
 leaves the machine except the one Graph read.
 
+> **No Azure?** If you have the classic Outlook desktop app on Windows, skip all of
+> this — read straight from the app with zero cloud auth. See
+> [windows-local-setup.md](windows-local-setup.md). The Graph path below is for
+> server/headless or non-Windows use.
+
 ## A. Register an Azure app (once, ~5 min)
 
 1. https://portal.azure.com → **Azure Active Directory → App registrations → New registration**.

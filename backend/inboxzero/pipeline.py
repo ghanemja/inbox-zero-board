@@ -16,6 +16,10 @@ def run(me: str, source: str = "db", limit: int = 100, use_gemma: bool = True):
             token = graph_client.acquire_token()
             for e in graph_client.fetch_messages(token, limit):
                 store.upsert_email(conn, e)
+        elif source == "outlook-local":
+            from . import outlook_local  # lazy — Windows + pywin32 only
+            for e in outlook_local.fetch_messages(limit):
+                store.upsert_email(conn, e)
 
         emails = list(store.iter_emails(conn))[:limit]
         counts: dict[str, int] = {}
