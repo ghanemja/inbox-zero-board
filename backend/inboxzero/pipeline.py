@@ -21,6 +21,8 @@ from . import store, classify, profiles, commitments
 def run(me: str, source: str = "db", limit: int = 100, use_gemma: bool = True,
         since: str | None = None, reclassify: bool = False, backfill: bool = False,
         path: str | None = None):
+    import time
+    t0 = time.time()
     store.init()
     with store.db() as conn:
         if source == "outlook":
@@ -95,6 +97,10 @@ def run(me: str, source: str = "db", limit: int = 100, use_gemma: bool = True,
         if _first_gemma_err:
             print(f"[gemma] actual error: {_first_gemma_err}")
         print("[gemma] Fix it, then re-run with --reclassify.")
+    el = time.time() - t0
+    g = layers.get("gemma", 0)
+    rate = f", ~{el / g:.1f}s per Gemma call" if g else ""
+    print(f"Done in {int(el // 60)}m {int(el % 60)}s ({n} processed{rate}).")
     return counts
 
 
