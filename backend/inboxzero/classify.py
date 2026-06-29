@@ -22,6 +22,7 @@ def classify_email(email: dict, me: str, use_gemma: bool = True) -> dict:
                 result = gemma.classify(email, me)
             except Exception as exc:  # Ollama down / model missing → fail safe to review
                 result = _review(f"gemma unavailable ({exc})")
+                result["layer"] = "gemma_error"   # distinct so the run can flag it loudly
         else:
             result = _review("ambiguous, no gemma")
 

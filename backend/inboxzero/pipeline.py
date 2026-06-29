@@ -45,8 +45,17 @@ def run(me: str, source: str = "db", limit: int = 100, use_gemma: bool = True,
             for e in files_client.fetch_messages(limit, since=since, path=path):
                 store.upsert_email(conn, e)
 
+        # preflight: tell the user up front whether Gemma will actually be used
+        if use_gemma and not backfill:
+            from . import gemma
+            ok, msg = gemma.health()
+            print(f"[gemma] {msg}")
+            if not ok:
+                print("[gemma] → continuing RULES-ONLY for this run (results will be rougher).")
+
         done = {r["email_id"] for r in conn.execute("SELECT email_id FROM classifications")}
         counts: dict[str, int] = {}
+        layers: dict[str, int] = {}
         for e in store.iter_emails(conn):
             already = e["id"] in done
             if already and not reclassify:
@@ -60,7 +69,14 @@ def run(me: str, source: str = "db", limit: int = 100, use_gemma: bool = True,
                 commitments.ingest(conn, e, me)
                 _record_interaction(conn, e, me)
             counts[result["board"]] = counts.get(result["board"], 0) + 1
+            layers[result.get("layer", "?")] = layers.get(result.get("layer", "?"), 0) + 1
 
+    # how each email was decided — so you can SEE whether Gemma ran
+    if any(layers.values()):
+        print("Decided by:", ", ".join(f"{k}={v}" for k, v in sorted(layers.items())))
+    if use_gemma and not backfill and layers.get("gemma_error"):
+        print(f"[gemma] WARNING: {layers['gemma_error']} email(s) fell back because Gemma failed — "
+              "these are rough. Fix Ollama (see the [gemma] line above) and re-run with --reclassify.")
     return counts
 
 

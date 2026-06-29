@@ -47,6 +47,22 @@ BODY:
 """
 
 
+def health() -> tuple[bool, str]:
+    """Is Ollama up and is the model present? Returns (ok, human message)."""
+    import requests
+    try:
+        r = requests.get(f"{OLLAMA_HOST}/api/tags", timeout=5)
+        r.raise_for_status()
+        models = [m.get("name", "") for m in r.json().get("models", [])]
+    except Exception as e:
+        return False, f"Ollama NOT reachable at {OLLAMA_HOST} ({e}). Start it: run 'ollama serve' (or open the Ollama app)."
+    base = GEMMA_MODEL.split(":")[0]
+    if GEMMA_MODEL not in models and not any(m.split(":")[0] == base for m in models):
+        return False, (f"Ollama is running but model '{GEMMA_MODEL}' is not installed. "
+                       f"Installed: {models or 'none'}. Run: ollama pull {GEMMA_MODEL}")
+    return True, f"Ollama OK — model {GEMMA_MODEL} present."
+
+
 def classify(email: dict, me: str) -> dict:
     import requests
     prompt = PROMPT.format(
