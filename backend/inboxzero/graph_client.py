@@ -69,8 +69,11 @@ def acquire_token() -> str:
     return result["access_token"]
 
 
-def fetch_messages(token: str, limit: int = 100) -> list[dict]:
-    """Pull recent messages and normalize to the store's email shape."""
+def fetch_messages(token: str, limit: int = 100, since: str | None = None) -> list[dict]:
+    """Pull recent messages and normalize to the store's email shape.
+
+    since='YYYY-MM-DD' limits to mail received on/after that date (fast first-run scoping).
+    """
     headers = {"Authorization": f"Bearer {token}",
                # ask Graph to render bodies as plain text (cleaner for the classifier)
                "Prefer": 'outlook.body-content-type="text"'}
@@ -80,6 +83,8 @@ def fetch_messages(token: str, limit: int = 100) -> list[dict]:
                    "conversationId,internetMessageHeaders",
         "$orderby": "receivedDateTime desc",
     }
+    if since:
+        params["$filter"] = f"receivedDateTime ge {since}T00:00:00Z"
     out: list[dict] = []
     url = f"{GRAPH}/me/messages"
     while url and len(out) < limit:

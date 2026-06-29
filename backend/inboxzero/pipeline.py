@@ -1,37 +1,62 @@
 """Ingest loop — pull (or read) emails, classify, learn, persist.
 
-Ties the layers together. Source 'db' reuses already-stored emails (e.g. the demo
-seed); source 'outlook' pulls fresh via Graph.
+Incremental + idempotent: each email is processed exactly once (a classification
+row marks it done), so scheduled re-runs are cheap and never double-count the graph.
+
+Modes:
+  normal   — classify (rules → Gemma → gate) + learn, only for emails not yet done.
+  backfill — metadata-only: build the graph/profiles/commitments from history WITHOUT
+             per-email Gemma (cheap over years of mail). Marked board='history'
+             (hidden from the boards), so it enriches the relationship graph only.
+
+Date scoping: `since='YYYY-MM-DD'` limits the pull to recent mail for fast first-run.
 """
 from __future__ import annotations
+
+from datetime import datetime, timezone
 
 from . import store, classify, profiles, commitments
 
 
-def run(me: str, source: str = "db", limit: int = 100, use_gemma: bool = True):
+def run(me: str, source: str = "db", limit: int = 100, use_gemma: bool = True,
+        since: str | None = None, reclassify: bool = False, backfill: bool = False):
     store.init()
     with store.db() as conn:
         if source == "outlook":
             from . import graph_client  # lazy — only needs `requests`/`msal` for real pulls
             token = graph_client.acquire_token()
-            for e in graph_client.fetch_messages(token, limit):
+            for e in graph_client.fetch_messages(token, limit, since=since):
                 store.upsert_email(conn, e)
         elif source == "outlook-local":
             from . import outlook_local  # lazy — Windows + pywin32 only
-            for e in outlook_local.fetch_messages(limit):
+            for e in outlook_local.fetch_messages(limit, since=since):
                 store.upsert_email(conn, e)
 
-        emails = list(store.iter_emails(conn))[:limit]
+        done = {r["email_id"] for r in conn.execute("SELECT email_id FROM classifications")}
         counts: dict[str, int] = {}
-        for e in emails:
-            result = classify.classify_email(e, me, use_gemma=use_gemma)
+        for e in store.iter_emails(conn):
+            already = e["id"] in done
+            if already and not reclassify:
+                counts["skipped"] = counts.get("skipped", 0) + 1
+                continue
+
+            result = _history_row(e) if backfill else classify.classify_email(e, me, use_gemma=use_gemma)
             store.save_classification(conn, result)
-            profiles.observe(conn, e, me, result)
-            commitments.ingest(conn, e, me)   # chief-of-staff: who owes whom
-            _record_interaction(conn, e, me)  # compounding graph: temporal edge
+            if not already:  # learn from each email exactly once (keeps the graph honest)
+                profiles.observe(conn, e, me, result if not backfill else {"topics": []})
+                commitments.ingest(conn, e, me)
+                _record_interaction(conn, e, me)
             counts[result["board"]] = counts.get(result["board"], 0) + 1
 
     return counts
+
+
+def _history_row(e: dict) -> dict:
+    """A 'done' marker for backfilled history mail — hidden from the boards."""
+    return {"email_id": e["id"], "board": "history", "task": None, "due": None,
+            "project_key": None, "topics": [], "reasoning": "history backfill",
+            "layer": "backfill", "confidence": 1.0,
+            "decided_at": datetime.now(timezone.utc).isoformat()}
 
 
 def _record_interaction(conn, e: dict, me: str):

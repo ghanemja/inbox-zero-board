@@ -42,6 +42,35 @@ REM open http://localhost:4178/  -> log in -> your real mail
 A reusable one-click script is provided: **`backend\scripts\run_local.bat`** (does
 the ingest + export in one go).
 
+## Rolling out to a pilot with years of mail
+
+Don't Gemma-classify years of email on the first run — that's hours. Three phases:
+
+**Phase 1 — recent window, full classification (get boards working fast).**
+```bat
+python scripts\run_ingest.py --source outlook-local --days 30 --limit 3000
+python scripts\export_ui.py --out ..\prototype\data.json
+```
+Last 30 days → Today / Board / Commitments populated. Rough time: tens of minutes to
+~an hour depending on machine + GPU + volume. Start at `--days 14` if you want value
+sooner; widen later (it only processes the new days).
+
+**Phase 2 — history backfill, metadata-only (years of graph depth, cheap).**
+```bat
+python scripts\run_ingest.py --source outlook-local --backfill --limit 50000
+```
+Builds the relationship graph, comm-style, commitments, and interaction history from
+your whole archive **without** running Gemma per email (rules + metadata only). This is
+where "years of mail" pays off — the compounding graph. Fast: minutes, not hours.
+
+**Phase 3 — keep it running, incremental (cheap, ongoing).**
+```bat
+REM re-running only processes NEW mail; already-seen mail is skipped, graph never double-counts
+python scripts\run_ingest.py --source outlook-local --days 7
+python scripts\export_ui.py --out ..\prototype\data.json
+```
+Schedule this (below). Each run touches only new mail → seconds to a couple minutes.
+
 ## Schedule it (the "cron" for Windows = Task Scheduler)
 
 Run it automatically, e.g. hourly:

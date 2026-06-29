@@ -11,6 +11,7 @@ For --source outlook-local, --me auto-detects the signed-in Outlook account.
 import argparse
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -25,7 +26,16 @@ def main():
     ap.add_argument("--limit", type=int, default=100)
     ap.add_argument("--me", default=os.getenv("ME", DEFAULT_ME))
     ap.add_argument("--no-gemma", action="store_true")
+    ap.add_argument("--days", type=int, help="only pull mail from the last N days (fast first-run scope)")
+    ap.add_argument("--since", help="only pull mail on/after YYYY-MM-DD (overrides --days)")
+    ap.add_argument("--backfill", action="store_true",
+                    help="metadata-only history pass: build the graph/profiles without per-email Gemma")
+    ap.add_argument("--reclassify", action="store_true", help="re-run classification on already-seen mail")
     args = ap.parse_args()
+
+    since = args.since
+    if not since and args.days:
+        since = (datetime.now(timezone.utc) - timedelta(days=args.days)).strftime("%Y-%m-%d")
 
     # local desktop Outlook: auto-detect the signed-in account as `me`
     if args.source == "outlook-local" and args.me == DEFAULT_ME:
@@ -33,7 +43,10 @@ def main():
         args.me = outlook_local.current_user_smtp() or args.me
         print(f"Using signed-in Outlook account: {args.me}")
 
-    counts = pipeline.run(args.me, source=args.source, limit=args.limit, use_gemma=not args.no_gemma)
+    if since:
+        print(f"Scope: mail since {since}")
+    counts = pipeline.run(args.me, source=args.source, limit=args.limit, use_gemma=not args.no_gemma,
+                          since=since, reclassify=args.reclassify, backfill=args.backfill)
     print("Classified:")
     for board, n in sorted(counts.items(), key=lambda kv: -kv[1]):
         print(f"  {board:14} {n}")

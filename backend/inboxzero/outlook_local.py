@@ -81,10 +81,14 @@ def _has_unsub(m) -> int:
         return 0
 
 
-def fetch_messages(limit: int = 100) -> list[dict]:
+def fetch_messages(limit: int = 100, since: str | None = None) -> list[dict]:
     inbox = _ns().GetDefaultFolder(OL_FOLDER_INBOX)
     items = inbox.Items
     items.Sort("[ReceivedTime]", True)  # newest first
+    if since:  # 'YYYY-MM-DD' → Outlook Restrict (fast, server-side-ish) on received date
+        from datetime import datetime
+        d = datetime.strptime(since, "%Y-%m-%d")
+        items = items.Restrict(f"[ReceivedTime] >= '{d.strftime('%m/%d/%Y')} 12:00 AM'")
     out: list[dict] = []
     for m in items:
         if len(out) >= limit:
