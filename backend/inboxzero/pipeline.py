@@ -59,9 +59,14 @@ def run(me: str, source: str = "db", limit: int = 100, use_gemma: bool = True,
                 print("[gemma] → continuing RULES-ONLY for this run (results will be rougher).")
 
         done = {r["email_id"] for r in conn.execute("SELECT email_id FROM classifications")}
+        total = conn.execute("SELECT COUNT(*) FROM emails").fetchone()[0]
+        todo_n = sum(1 for r in conn.execute("SELECT id FROM emails") if reclassify or r["id"] not in done)
+        print(f"Processing {todo_n} of {total} emails"
+              + (" (Gemma runs only on the ambiguous ones)..." if use_gemma and not backfill else "..."))
         counts: dict[str, int] = {}
         layers: dict[str, int] = {}
         _first_gemma_err = None
+        n = 0
         for e in store.iter_emails(conn):
             already = e["id"] in done
             if already and not reclassify:
@@ -78,6 +83,9 @@ def run(me: str, source: str = "db", limit: int = 100, use_gemma: bool = True,
             layers[result.get("layer", "?")] = layers.get(result.get("layer", "?"), 0) + 1
             if result.get("layer") == "gemma_error" and _first_gemma_err is None:
                 _first_gemma_err = result.get("reasoning", "")
+            n += 1
+            if n % 20 == 0:
+                print(f"  ...{n}/{todo_n} processed (gemma={layers.get('gemma', 0)})", flush=True)
 
     # how each email was decided — so you can SEE whether Gemma ran
     if any(layers.values()):
