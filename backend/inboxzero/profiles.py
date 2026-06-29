@@ -32,7 +32,7 @@ _EMOJI_RE = re.compile(r"[\U0001F300-\U0001FAFF☀-➿]")
 
 def blank_profile(addr: str, name: str = "", role: str = "") -> dict:
     return {"name": name, "role": role, "domains": {}, "request_templates": {},
-            "counts": {"sent": 0, "recv": 0}, "style": _blank_style()}
+            "counts": {"sent": 0, "recv": 0, "solo": 0, "group": 0}, "style": _blank_style()}
 
 
 def _blank_style() -> dict:
@@ -67,10 +67,15 @@ def comm_style(prof: dict) -> dict:
     avg = sum(st["len_words"]) / len(st["len_words"]) if st["len_words"] else 0
     length = "short" if avg < 25 else "med" if avg < 70 else "long"
     top = lambda d: (Counter(d).most_common(1)[0][0] if d else None)
+    counts = prof.get("counts", {})
+    solo = counts.get("solo", 0)
+    group = counts.get("group", 0)
+    total = solo + group
+    solo_pct = round(100 * solo / total) if total else None
     return {"greet": top(st["greet"]), "signoff": top(st["signoff"]),
             "len": length, "avg_words": round(avg),
             "emoji": st["emoji"] / n >= 0.3, "channel": top(st["channel"]) or "email",
-            "samples": st["msgs"]}
+            "samples": st["msgs"], "solo_pct": solo_pct}
 
 
 def _first_sentence(body: str) -> str:
@@ -94,12 +99,23 @@ def observe(conn, email: dict, me: str, extracted: dict):
 
     prof["counts"]["sent" if from_me else "recv"] += 1
 
+    # --- 1:1 vs group tracking ---
+    all_recipients = list(email.get("to_addrs") or []) + list(email.get("cc_addrs") or [])
+    unique_others = [a for a in all_recipients if a.lower() != me_l]
+    counts = prof["counts"]
+    counts.setdefault("solo", 0)
+    counts.setdefault("group", 0)
+    if len(unique_others) <= 1:
+        counts["solo"] += 1
+    else:
+        counts["group"] += 1
+
     # --- communication style: how YOU write to them (§2/§9) ---
     if from_me:
         _update_style(prof, email)
 
     # --- domain accrual (§2) ---
-    for topic in extracted.get("topics", []):
+    for topic in (extracted.get("topics") or []):
         d = prof["domains"].setdefault(topic, {"support": 0, "last_seen": now})
         d["support"] += 1
         d["last_seen"] = now
@@ -110,7 +126,7 @@ def observe(conn, email: dict, me: str, extracted: dict):
     if rtype:
         tpl = prof["request_templates"].setdefault(
             rtype, {"slots": {}, "tone_exemplars": [], "turnaround_samples": []})
-        observed_slots = set(extracted.get("slots", {}).keys())
+        observed_slots = set((extracted.get("slots") or {}).keys())
         # every slot we've ever seen for this type gets a `seen` tick; present ones get `present`
         known = set(tpl["slots"].keys()) | observed_slots
         for name in known:
@@ -120,7 +136,7 @@ def observe(conn, email: dict, me: str, extracted: dict):
                 s["present"] += 1
         # "they asked you for X" → mark required immediately (strong signal)
         if not from_me:
-            for name in extracted.get("asked_for", []):
+            for name in (extracted.get("asked_for") or []):
                 s = tpl["slots"].setdefault(name, {"seen": 1, "present": 0, "source": "they_asked"})
                 s["source"] = "they_asked"
         # tone exemplar from your own outgoing asks

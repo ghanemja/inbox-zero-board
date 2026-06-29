@@ -31,16 +31,19 @@ CREATE TABLE IF NOT EXISTS emails (
   conversation_id TEXT       -- Graph conversationId, for thread/project clustering
 );
 CREATE TABLE IF NOT EXISTS classifications (
-  email_id      TEXT PRIMARY KEY REFERENCES emails(id),
-  board         TEXT,      -- todo | awareness | project | archive | needs_review
-  task          TEXT,      -- extracted action (nullable)
-  due           TEXT,      -- extracted due date (nullable)
-  project_key   TEXT,      -- cluster id when board=project (nullable)
-  topics        TEXT,      -- json list
-  reasoning     TEXT,      -- human-readable "why" (the audit chip)
-  layer         TEXT,      -- rules | gemma
-  confidence    REAL,
-  decided_at    TEXT
+  email_id          TEXT PRIMARY KEY REFERENCES emails(id),
+  board             TEXT,      -- todo | awareness | project | archive | needs_review
+  task              TEXT,      -- extracted action (nullable)
+  due               TEXT,      -- extracted due date (nullable)
+  project_key       TEXT,      -- cluster id when board=project (nullable)
+  topics            TEXT,      -- json list
+  reasoning         TEXT,      -- human-readable "why" (the audit chip)
+  layer             TEXT,      -- rules | gemma
+  confidence        REAL,
+  decided_at        TEXT,
+  urgency           TEXT,      -- low | medium | high (gemma)
+  decision_needed   INTEGER,   -- 0/1 boolean (gemma)
+  communication_mode TEXT      -- 1on1 | group_update | broadcast | escalation (gemma)
 );
 CREATE TABLE IF NOT EXISTS contacts (
   email_addr    TEXT PRIMARY KEY,
@@ -89,6 +92,13 @@ def db(path=DB_PATH):
 def init(path=DB_PATH):
     with db(path) as conn:
         conn.executescript(SCHEMA)
+        # migration: add new columns to existing DBs without dropping data
+        for col, defn in [("urgency", "TEXT"), ("decision_needed", "INTEGER"),
+                          ("communication_mode", "TEXT")]:
+            try:
+                conn.execute(f"ALTER TABLE classifications ADD COLUMN {col} {defn}")
+            except Exception:
+                pass  # column already exists
 
 
 def upsert_email(conn, e: dict):
@@ -104,9 +114,14 @@ def upsert_email(conn, e: dict):
 def save_classification(conn, c: dict):
     conn.execute(
         """INSERT OR REPLACE INTO classifications
-           (email_id, board, task, due, project_key, topics, reasoning, layer, confidence, decided_at)
-           VALUES (:email_id,:board,:task,:due,:project_key,:topics,:reasoning,:layer,:confidence,:decided_at)""",
-        {**c, "topics": json.dumps(c.get("topics", []))},
+           (email_id, board, task, due, project_key, topics, reasoning, layer, confidence, decided_at,
+            urgency, decision_needed, communication_mode)
+           VALUES (:email_id,:board,:task,:due,:project_key,:topics,:reasoning,:layer,:confidence,:decided_at,
+                   :urgency,:decision_needed,:communication_mode)""",
+        {**c, "topics": json.dumps(c.get("topics", [])),
+         "urgency": c.get("urgency", "medium"),
+         "decision_needed": 1 if c.get("decision_needed") else 0,
+         "communication_mode": c.get("communication_mode", "1on1")},
     )
 
 

@@ -47,9 +47,13 @@ def export(db_path: str, me: str = "you@acme.com") -> dict:
         for r in rows:
             if r["board"] == "todo":
                 due = r["due"]
-                todos.append({"id": r["email_id"], "cls": "soon" if due else "todo",
+                urgency = r["urgency"] if "urgency" in r.keys() else "medium"
+                cls = "overdue" if urgency == "high" and due else ("soon" if due else "todo")
+                todos.append({"id": r["email_id"], "cls": cls,
                               "title": r["task"] or r["subject"], "owner": "You", "team": "Inbox",
                               "due": due or "no date", "pill": ["amber" if due else "gray", due or "no date"],
+                              "urgency": urgency or "medium",
+                              "decisionNeeded": bool(r["decision_needed"]) if "decision_needed" in r.keys() else False,
                               "from": r["from_addr"], "subj": r["subject"], "body": "",
                               "why": [r["reasoning"]], "thread": []})
             elif r["board"] in ("awareness", "needs_review"):
@@ -104,6 +108,7 @@ def export(db_path: str, me: str = "you@acme.com") -> dict:
                            "yourLatencyH": r.get("your_latency_h"), "theirLatencyH": r.get("their_latency_h"),
                            "replyPairs": r.get("reply_pairs", 0), "responseRate": r.get("response_rate"),
                            "openLoops": r.get("open_loops", 0), "openLoopSubjects": r.get("open_loop_subjects", []),
+                           "soloPct": cs.get("solo_pct"),
                            "style": {"formality": formality, "len": cs["len"], "channel": cs["channel"],
                                      "greet": cs["greet"] or "Hi", "signoff": cs["signoff"] or "Thanks,",
                                      "emoji": cs["emoji"], "cadence": "—"}})

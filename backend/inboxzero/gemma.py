@@ -21,6 +21,10 @@ CLASSIFY_SCHEMA = {
         "request_type": {"type": ["string", "null"]},   # e.g. "catering request"
         "slots": {"type": "object"},                      # typed entities: date, headcount, budget_code...
         "asked_for": {"type": "array", "items": {"type": "string"}},  # slots the SENDER asked you to provide
+        "urgency": {"type": "string", "enum": ["low", "medium", "high"]},
+        "decision_needed": {"type": "boolean"},           # someone is waiting on YOUR decision (not just a task)
+        "communication_mode": {"type": "string",          # conversational register
+                               "enum": ["1on1", "group_update", "broadcast", "escalation"]},
         "reasoning": {"type": "string"},
         "confidence": {"type": "number"},
     },
@@ -33,14 +37,20 @@ Decide the board:
 - awareness: FYI / cc'd / informational, no action needed.
 - project: part of a multi-step initiative spanning weeks (e.g. a conference submission, a hire, a contract).
 - archive: pure noise.
-Also list 1-3 topics. If this email is a request of a recognizable type, set `request_type`
-and pull any concrete details into `slots` (date, headcount, budget_code, dietary, location, etc).
-If the SENDER is asking the owner to supply specific details, list those in `asked_for`.
-Give a one-sentence `reasoning` and a 0-1 `confidence`. Never invent a deadline that isn't stated.
+Also:
+- List 1-3 `topics`.
+- Set `urgency`: high (same-day or blocking others), medium (this week), low (no deadline pressure).
+- Set `decision_needed`: true only if someone is explicitly waiting on the owner to make a call or give approval.
+- Set `communication_mode`: 1on1 (private exchange), group_update (team/project status), broadcast (announcement/newsletter), escalation (urgent issue raised to a senior).
+- If recognizable request type, set `request_type` and pull concrete details into `slots` (date, headcount, budget_code, dietary, location, etc).
+- If the SENDER is asking the owner to supply specific details, list those in `asked_for`.
+- Give a one-sentence `reasoning` and a 0-1 `confidence`. Never invent a deadline that isn't stated.
 
 Respond with ONLY a JSON object, no prose, with these keys:
 {{"board": "todo|awareness|project|archive", "task": string|null, "due": string|null,
- "topics": [string], "request_type": string|null, "slots": {{}}, "asked_for": [string],
+ "topics": [string], "urgency": "low|medium|high", "decision_needed": bool,
+ "communication_mode": "1on1|group_update|broadcast|escalation",
+ "request_type": string|null, "slots": {{}}, "asked_for": [string],
  "reasoning": string, "confidence": number}}
 
 FROM: {frm}
@@ -148,11 +158,21 @@ def classify(email: dict, me: str) -> dict:
     data.setdefault("task", None)
     data.setdefault("due", None)
     data.setdefault("topics", [])
+    data.setdefault("urgency", "medium")
+    data.setdefault("decision_needed", False)
+    data.setdefault("communication_mode", "1on1")
     data.setdefault("request_type", None)
     data.setdefault("slots", {})
     data.setdefault("asked_for", [])
     data.setdefault("reasoning", "classified by gemma")
     data.setdefault("confidence", 0.7)   # model gave a board but omitted a score → trust it
+    # guard: model may return null for list/dict fields
+    if not isinstance(data.get("topics"), list):
+        data["topics"] = []
+    if not isinstance(data.get("asked_for"), list):
+        data["asked_for"] = []
+    if not isinstance(data.get("slots"), dict):
+        data["slots"] = {}
     data["layer"] = "gemma"
     data["project_key"] = None  # set later by playbooks clustering
     return data
