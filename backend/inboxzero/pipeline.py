@@ -45,12 +45,17 @@ def run(me: str, source: str = "db", limit: int = 100, use_gemma: bool = True,
             for e in files_client.fetch_messages(limit, since=since, path=path):
                 store.upsert_email(conn, e)
 
-        # preflight: tell the user up front whether Gemma will actually be used
+        # preflight: tell the user up front whether Gemma will actually be used,
+        # and load the model once so the first email doesn't pay a cold-start timeout.
         if use_gemma and not backfill:
             from . import gemma
             ok, msg = gemma.health()
             print(f"[gemma] {msg}")
-            if not ok:
+            if ok:
+                print("[gemma] loading model (first run is slow, then it stays warm)...")
+                wok, wmsg = gemma.warmup()
+                print(f"[gemma] {wmsg}")
+            else:
                 print("[gemma] → continuing RULES-ONLY for this run (results will be rougher).")
 
         done = {r["email_id"] for r in conn.execute("SELECT email_id FROM classifications")}

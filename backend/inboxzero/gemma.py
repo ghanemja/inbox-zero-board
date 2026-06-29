@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 
-from config import OLLAMA_HOST, GEMMA_MODEL, EMBED_MODEL
+from config import OLLAMA_HOST, GEMMA_MODEL, EMBED_MODEL, OLLAMA_TIMEOUT, OLLAMA_KEEP_ALIVE
 
 # Ollama supports a JSON schema in `format` to constrain decoding.
 CLASSIFY_SCHEMA = {
@@ -63,6 +63,21 @@ def health() -> tuple[bool, str]:
     return True, f"Ollama OK — model {GEMMA_MODEL} present."
 
 
+def warmup() -> tuple[bool, str]:
+    """Load the model into memory once (first call is the slow one). Returns (ok, msg)."""
+    import time
+    import requests
+    try:
+        t = time.time()
+        requests.post(f"{OLLAMA_HOST}/api/generate",
+                      json={"model": GEMMA_MODEL, "prompt": "ok", "stream": False,
+                            "keep_alive": OLLAMA_KEEP_ALIVE, "options": {"num_predict": 1}},
+                      timeout=OLLAMA_TIMEOUT)
+        return True, f"model warm ({time.time() - t:.0f}s to load)"
+    except Exception as e:
+        return False, f"warmup failed ({e})"
+
+
 def classify(email: dict, me: str) -> dict:
     import requests
     prompt = PROMPT.format(
@@ -73,8 +88,9 @@ def classify(email: dict, me: str) -> dict:
     resp = requests.post(
         f"{OLLAMA_HOST}/api/generate",
         json={"model": GEMMA_MODEL, "prompt": prompt, "stream": False,
-              "format": CLASSIFY_SCHEMA, "options": {"temperature": 0}},
-        timeout=120,
+              "format": CLASSIFY_SCHEMA, "keep_alive": OLLAMA_KEEP_ALIVE,
+              "options": {"temperature": 0, "num_predict": 300}},
+        timeout=OLLAMA_TIMEOUT,
     )
     resp.raise_for_status()
     data = json.loads(resp.json()["response"])

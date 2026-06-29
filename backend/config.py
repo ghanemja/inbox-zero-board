@@ -24,6 +24,8 @@ IMAP_PASS = os.getenv("IMAP_PASS", "")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 GEMMA_MODEL = os.getenv("GEMMA_MODEL", "gemma3:4b")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text")
+OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "300"))   # per-request seconds (slow hardware / cold load)
+OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "15m")  # keep model loaded between emails
 
 CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.6"))
 PLAYBOOK_MATCH_THRESHOLD = float(os.getenv("PLAYBOOK_MATCH_THRESHOLD", "0.75"))
