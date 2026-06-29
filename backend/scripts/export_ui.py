@@ -39,7 +39,7 @@ def _strip_re(subject: str) -> str:
             return s.strip() or "(thread)"
 
 
-def export(db_path: str) -> dict:
+def export(db_path: str, me: str = "you@acme.com") -> dict:
     todos, aware, projects, people = [], [], [], []
     with store.db(db_path) as conn:
         rows = conn.execute("""SELECT c.*, e.subject, e.from_addr
@@ -75,22 +75,35 @@ def export(db_path: str) -> dict:
                              "emails": list(dict.fromkeys(subjects))[:6]})
 
         now = datetime.now(timezone.utc)
+        rel = graph.relationship_metrics(conn, me, now)            # thread-aware, one pass
+        open_ask_addrs = {c["counterpart"] for c in store.list_commitments(conn, "open")}
         idx = {}
         for cr in conn.execute("SELECT email_addr, profile FROM contacts"):
+            addr = cr["email_addr"]
             p = json.loads(cr["profile"])
             tot = p["counts"]["sent"] + p["counts"]["recv"]
             cs = profiles.comm_style(p)
             formality = 2 if (cs["greet"] in _FORMAL_GREET or cs["signoff"] in _FORMAL_SIGN) else 1
-            init = _init(p.get("name") or cr["email_addr"])
-            idx[cr["email_addr"]] = init
-            series = graph.weekly_series(conn, cr["email_addr"], now)
-            channels = sorted({it["channel"] for it in store.interactions_for(conn, cr["email_addr"])}) or [cs["channel"]]
-            people.append({"n": p.get("name") or cr["email_addr"], "r": p.get("role", ""),
+            init = _init(p.get("name") or addr)
+            idx[addr] = init
+            series = graph.weekly_series(conn, addr, now)
+            its = store.interactions_for(conn, addr)
+            channels = sorted({it["channel"] for it in its}) or [cs["channel"]]
+            days_quiet = (now - graph._parse(its[-1]["ts"])).days if its else None
+            domains = p.get("domains", {})
+            dominant = max(domains, key=lambda d: domains[d].get("support", 0)) if domains else None
+            r = rel.get(addr, {})
+            people.append({"n": p.get("name") or addr, "r": p.get("role", ""),
                            "team": "Inbox", "inf": 2 if tot >= 40 else 1 if tot >= 20 else 0,
                            "sent": p["counts"]["sent"], "recv": p["counts"]["recv"],
                            "init": init, "channel": cs["channel"], "channels": channels,
                            "series": series, "trend": graph.trend(series), "dormant": graph.dormant(series),
-                           "domains": list(p.get("domains", {}).keys()),
+                           "recentVol": sum(series[-4:]), "daysQuiet": days_quiet,
+                           "domains": list(domains.keys()), "dominantTopic": dominant,
+                           "hasOpenAsk": addr in open_ask_addrs,
+                           "yourLatencyH": r.get("your_latency_h"), "theirLatencyH": r.get("their_latency_h"),
+                           "replyPairs": r.get("reply_pairs", 0), "responseRate": r.get("response_rate"),
+                           "openLoops": r.get("open_loops", 0), "openLoopSubjects": r.get("open_loop_subjects", []),
                            "style": {"formality": formality, "len": cs["len"], "channel": cs["channel"],
                                      "greet": cs["greet"] or "Hi", "signoff": cs["signoff"] or "Thanks,",
                                      "emoji": cs["emoji"], "cadence": "—"}})
@@ -109,11 +122,14 @@ def export(db_path: str) -> dict:
 
 
 def main():
+    import os
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default=store.DB_PATH)
     ap.add_argument("--out", default="../prototype/data.json")
+    ap.add_argument("--me", default=os.getenv("ME", "you@acme.com"),
+                    help="your email (same as ingest) — needed for reply-time / who-owes-whom metrics")
     args = ap.parse_args()
-    data = export(args.db)
+    data = export(args.db, args.me)
     with open(args.out, "w") as f:
         json.dump(data, f, indent=2)
     print(f"Wrote {args.out}: "

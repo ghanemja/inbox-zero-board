@@ -54,6 +54,81 @@ def dormant(series: list[int]) -> bool:
     return sum(series[-2:]) <= 2 and any(v >= 5 for v in series[:4])
 
 
+def _median(xs: list[float]):
+    if not xs:
+        return None
+    s = sorted(xs)
+    n = len(s)
+    return s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2
+
+
+def relationship_metrics(conn, me: str, now: datetime, window_days: int = 90) -> dict:
+    """One pass over email threads → per-contact two-sided responsiveness.
+
+    Returns {addr: {your_latency_h, their_latency_h, reply_pairs, their_pairs,
+                    response_rate, open_loops, open_loop_subjects}}.
+    Thread-aware: pairs a reply to its trigger within a conversation_id. Behavioral
+    metadata only (no sentiment) — honors the ethics rule below.
+    """
+    me_l = me.lower()
+    start = now - timedelta(days=window_days)
+    rows = conn.execute(
+        "SELECT from_addr, subject, received, conversation_id, has_unsub FROM emails "
+        "WHERE conversation_id IS NOT NULL AND conversation_id != '' "
+        "ORDER BY conversation_id, received").fetchall()
+
+    M: dict[str, dict] = {}
+
+    def m(addr):
+        return M.setdefault(addr, {"your": [], "their": [], "denom": 0, "num": 0,
+                                   "open_loops": 0, "open_loop_subjects": []})
+
+    # group by conversation_id
+    threads: dict[str, list] = {}
+    for r in rows:
+        t = _parse(r["received"])
+        if t < start or t > now:
+            continue
+        threads.setdefault(r["conversation_id"], []).append((t, r["from_addr"].lower(),
+                                                              r["from_addr"], r["subject"], r["has_unsub"]))
+
+    for conv, msgs in threads.items():
+        msgs.sort(key=lambda x: x[0])
+        pending_in: dict[str, datetime] = {}   # their msg awaiting your reply
+        pending_out = None                      # your msg awaiting their reply
+        for ts, frm_l, frm, subj, unsub in msgs:
+            if frm_l == me_l:                   # you sent
+                for addr, in_ts in list(pending_in.items()):
+                    m(addr)["your"].append((ts - in_ts).total_seconds() / 3600)
+                    m(addr)["num"] += 1
+                    del pending_in[addr]
+                pending_out = ts
+            else:                               # they sent
+                if not unsub:
+                    m(frm)["denom"] += 1
+                pending_in[frm] = ts
+                if pending_out and ts > pending_out:
+                    m(frm)["their"].append((ts - pending_out).total_seconds() / 3600)
+                    pending_out = None
+        # open loop: thread's last message is inbound from them, aged > 5 days
+        last_ts, last_l, last_frm, last_subj, _ = msgs[-1]
+        if last_l != me_l and (now - last_ts).days > 5:
+            d = m(last_frm)
+            d["open_loops"] += 1
+            if len(d["open_loop_subjects"]) < 5:
+                d["open_loop_subjects"].append(last_subj or "(no subject)")
+
+    out = {}
+    for addr, d in M.items():
+        out[addr] = {
+            "your_latency_h": _median(d["your"]), "reply_pairs": len(d["your"]),
+            "their_latency_h": _median(d["their"]), "their_pairs": len(d["their"]),
+            "response_rate": round(100 * d["num"] / d["denom"]) if d["denom"] else None,
+            "open_loops": d["open_loops"], "open_loop_subjects": d["open_loop_subjects"],
+        }
+    return out
+
+
 def bus_factor(conn) -> list[dict]:
     """Domains owned by exactly one (influential) person — single points of failure."""
     owners: dict[str, list[str]] = {}

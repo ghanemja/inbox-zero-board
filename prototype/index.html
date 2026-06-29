@@ -913,13 +913,34 @@ function runTicket(){
 }
 
 /* ---------- insights side panels ---------- */
+/* ---------- real relationship metrics (from backend export; graceful if absent) ---------- */
+const fmtDur=h=>(h==null)?null:(h<48?`~${Math.round(h)}h`:`~${Math.round(h/24)}d`);
+function ratioLabel(p){const r=p.sent/Math.max(1,p.recv);
+  return r>1.8?['mostly you → them','var(--amber-ink)']:r<0.55?['mostly them → you','var(--aware-ink)']:['balanced','var(--ink2)'];}
+const firstName=p=>p.n.split(' ')[0];
+function computeInsights(){
+  const real=people.some(p=>p.yourLatencyH!=null||p.theirLatencyH!=null||p.openLoops>0);
+  if(!real) return insights;   // demo seed → keep the static examples
+  const rows=[]; const imp=people.filter(p=>p.inf>=1);
+  const slowYou=imp.filter(p=>p.yourLatencyH!=null&&p.replyPairs>=3).sort((a,b)=>b.yourLatencyH-a.yourLatencyH)[0];
+  if(slowYou)rows.push(['var(--todo-bg)','var(--todo-ink)','◷',`Your slowest reply loop: ${firstName(slowYou)} waits ${fmtDur(slowYou.yourLatencyH)} on average.`]);
+  const totLoops=people.reduce((s,p)=>s+(p.openLoops||0),0);
+  if(totLoops)rows.push(['var(--aware-bg)','var(--aware-ink)','⤺',`You've gone quiet on ${totLoops} thread${totLoops===1?'':'s'} — last word was theirs.`]);
+  const slowThem=imp.filter(p=>p.theirLatencyH!=null&&p.theirLatencyH>=48).sort((a,b)=>b.theirLatencyH-a.theirLatencyH)[0];
+  if(slowThem)rows.push(['var(--amber-bg)','var(--amber-ink)','◎',`${firstName(slowThem)} is slow to reply to you (${fmtDur(slowThem.theirLatencyH)}).`]);
+  const reconnect=people.filter(p=>p.dormant&&p.inf>=1).sort((a,b)=>(b.daysQuiet||0)-(a.daysQuiet||0))[0];
+  if(reconnect)rows.push(['var(--proj-bg)','var(--proj-ink)','↑',`Reconnect: ${reconnect.n} has gone quiet${reconnect.daysQuiet?` (${reconnect.daysQuiet}d)`:''} — was a key contact.`]);
+  return rows.length?rows:insights;
+}
 function renderIns(){
-  document.getElementById('people').innerHTML=people.map(p=>({...p,tot:p.sent+p.recv})).sort((a,b)=>b.tot-a.tot).slice(0,5)
-    .map(p=>`<div class="person">${av(p.init,'l')}<div><div class="nm">${p.n}</div><div class="rl">${p.r}</div></div>
-       <div class="ct"><b>${p.tot}</b><div class="x">${p.sent}↑ ${p.recv}↓</div></div></div>`).join('');
+  const ranked=[...people].sort((a,b)=>(b.recentVol??(b.sent+b.recv))-(a.recentVol??(a.sent+a.recv))).slice(0,6);
+  document.getElementById('people').innerHTML=ranked.map(p=>{const lab=ratioLabel(p), dom=p.dominantTopic?`<span class="teamchip">${p.dominantTopic}</span>`:'';
+    return `<div class="person">${av(p.init,'l')}
+       <div style="flex:1"><div class="nm">${p.n} ${dom}</div><div class="rl" style="color:${lab[1]}">${p.sent}↑ ${p.recv}↓ · ${lab[0]}</div></div>
+       <div class="ct"><b>${p.sent+p.recv}</b><div class="x">${p.trend||''}</div></div></div>`;}).join('');
   document.getElementById('topics').innerHTML=topics.map(t=>`<div class="topic"><div class="tl"><span>${t.n}</span><span>${t.pct}%</span></div>
      <div class="tb"><div style="width:${t.pct*3}%;height:100%;background:${t.c}"></div></div></div>`).join('');
-  document.getElementById('insights').innerHTML=insights.map(i=>`<div class="insrow"><div class="ic" style="background:${i[0]};color:${i[1]}">${i[2]}</div><div>${i[3]}</div></div>`).join('');
+  document.getElementById('insights').innerHTML=computeInsights().map(i=>`<div class="insrow"><div class="ic" style="background:${i[0]};color:${i[1]}">${i[2]}</div><div>${i[3]}</div></div>`).join('');
 }
 /* relationship health — BEHAVIORAL ONLY, opt-in, local. No emotional-state/character signals.
    Allowed: reply latency, reciprocity, silence, aging commitments, bus-factor. */
@@ -954,13 +975,21 @@ function showNode(n){
   const sample=`${st.greet||'Hi'} ${first} — quick one on ${(p.domains[0]||'this')}. ${st.signoff||'Thanks,'}`;
   const sole=busFactorRisks().filter(r=>r.who.init===p.init).map(r=>r.domain);
   const flags=[];
-  if(p.dormant)flags.push(`<span class="trend tr-fading">dormant — was active</span>`);
+  if(p.openLoops>0)flags.push(`<span class="trend" style="background:var(--red-bg);color:var(--red)">${p.openLoops} thread${p.openLoops===1?'':'s'} waiting on you</span>`);
+  if(p.dormant)flags.push(`<span class="trend tr-fading">dormant${p.daysQuiet?` ${p.daysQuiet}d`:''}</span>`);
   if(sole.length)flags.push(`<span class="trend" style="background:var(--amber-bg);color:var(--amber-ink)">sole owner: ${sole.join(', ')}</span>`);
+  const yl=fmtDur(p.yourLatencyH), tl=fmtDur(p.theirLatencyH), lab=ratioLabel(p);
+  const hasResp=(yl||tl||p.responseRate!=null);
   box.innerHTML=`<div style="display:flex;align-items:center;gap:9px;margin-bottom:8px">${av(p.init,'m')}<b style="color:var(--ink)">${p.n}</b><span style="color:var(--ink3)">· ${p.r}</span>
       <span class="trend tr-${p.trend}" style="margin-left:auto">${p.trend}</span></div>
     <div style="margin-bottom:7px">Handles: ${p.domains.map(d=>`<span class="dchip" onclick="seedTicket('${d}')">${d}${domainRoute[d]?' ↗':''}</span>`).join('')}</div>
-    <div style="font-size:12px;margin-bottom:8px">Spans: ${(p.channels||[]).map(c=>chanChip(c)).join(' ')} · replies ${st.cadence||'—'}</div>
+    <div style="font-size:12px;margin-bottom:8px">Spans: ${(p.channels||[]).map(c=>chanChip(c)).join(' ')}</div>
     ${flags.length?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px">${flags.join('')}</div>`:''}
+    ${hasResp?`<div class="style" style="border-top:0;padding-top:0;margin-top:0">
+      <div class="row"><span class="k">Reply time</span><span>You <b>${yl||'—'}</b> · Them <b>${tl||'—'}</b></span></div>
+      ${p.responseRate!=null?`<div class="row"><span class="k">You answer</span><span>${p.responseRate}% of their emails</span></div>`:''}
+      <div class="row"><span class="k">Balance</span><span style="color:${lab[1]}">${p.sent}↑ ${p.recv}↓ · ${lab[0]}</span></div>
+    </div>`:''}
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
       <div style="flex:1"><div style="font-size:11px;color:var(--ink3);margin-bottom:2px">Interaction · last 8 weeks</div>${spark(p.series,TRENDCOL[p.trend])}</div>
       <div style="text-align:right"><div style="font-size:18px;font-weight:600">${p.sent+p.recv}</div><div style="font-size:10px;color:var(--ink2)">${p.sent}↑ ${p.recv}↓</div></div>
