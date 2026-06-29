@@ -47,20 +47,46 @@ BODY:
 """
 
 
-def health() -> tuple[bool, str]:
-    """Is Ollama up and is the model present? Returns (ok, human message)."""
+_RESOLVED_MODEL: str | None = None
+
+
+def _installed_models() -> list[str]:
     import requests
+    r = requests.get(f"{OLLAMA_HOST}/api/tags", timeout=5)
+    r.raise_for_status()
+    return [m.get("name", "") for m in r.json().get("models", [])]
+
+
+def resolve_model() -> str:
+    """Use GEMMA_MODEL if installed; else auto-pick any installed gemma (or any chat
+    model). Means it 'just works' with whatever you've pulled, no .env edit needed."""
+    global _RESOLVED_MODEL
+    if _RESOLVED_MODEL:
+        return _RESOLVED_MODEL
     try:
-        r = requests.get(f"{OLLAMA_HOST}/api/tags", timeout=5)
-        r.raise_for_status()
-        models = [m.get("name", "") for m in r.json().get("models", [])]
+        models = _installed_models()
+    except Exception:
+        return GEMMA_MODEL
+    if GEMMA_MODEL in models:
+        _RESOLVED_MODEL = GEMMA_MODEL
+    else:
+        chat = [m for m in models if "embed" not in m.lower()]
+        gemma = [m for m in chat if "gemma" in m.lower()]
+        _RESOLVED_MODEL = (gemma or chat or [GEMMA_MODEL])[0]
+    return _RESOLVED_MODEL
+
+
+def health() -> tuple[bool, str]:
+    """Is Ollama up and is a usable model present? Returns (ok, human message)."""
+    try:
+        models = _installed_models()
     except Exception as e:
         return False, f"Ollama NOT reachable at {OLLAMA_HOST} ({e}). Start it: run 'ollama serve' (or open the Ollama app)."
-    base = GEMMA_MODEL.split(":")[0]
-    if GEMMA_MODEL not in models and not any(m.split(":")[0] == base for m in models):
-        return False, (f"Ollama is running but model '{GEMMA_MODEL}' is not installed. "
-                       f"Installed: {models or 'none'}. Run: ollama pull {GEMMA_MODEL}")
-    return True, f"Ollama OK — model {GEMMA_MODEL} present."
+    if not [m for m in models if "embed" not in m.lower()]:
+        return False, f"Ollama is running but no chat model is installed. Run: ollama pull {GEMMA_MODEL}"
+    model = resolve_model()
+    note = "" if model == GEMMA_MODEL else f" (GEMMA_MODEL='{GEMMA_MODEL}' not found — using this instead)"
+    return True, f"Ollama OK — using model '{model}'{note}."
 
 
 def warmup() -> tuple[bool, str]:
@@ -70,7 +96,7 @@ def warmup() -> tuple[bool, str]:
     try:
         t = time.time()
         requests.post(f"{OLLAMA_HOST}/api/generate",
-                      json={"model": GEMMA_MODEL, "prompt": "ok", "stream": False,
+                      json={"model": resolve_model(), "prompt": "ok", "stream": False,
                             "keep_alive": OLLAMA_KEEP_ALIVE, "options": {"num_predict": 1}},
                       timeout=OLLAMA_TIMEOUT)
         return True, f"model warm ({time.time() - t:.0f}s to load)"
@@ -87,7 +113,7 @@ def classify(email: dict, me: str) -> dict:
     )
     resp = requests.post(
         f"{OLLAMA_HOST}/api/generate",
-        json={"model": GEMMA_MODEL, "prompt": prompt, "stream": False,
+        json={"model": resolve_model(), "prompt": prompt, "stream": False,
               "format": CLASSIFY_SCHEMA, "keep_alive": OLLAMA_KEEP_ALIVE,
               "options": {"temperature": 0, "num_predict": 300}},
         timeout=OLLAMA_TIMEOUT,
