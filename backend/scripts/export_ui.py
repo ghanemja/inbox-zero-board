@@ -29,6 +29,16 @@ def _init(name: str) -> str:
     return (parts[0][0] + parts[1][0]).upper() if len(parts) >= 2 else name[:2].upper()
 
 
+def _strip_re(subject: str) -> str:
+    s = subject or ""
+    while True:
+        low = s.lstrip().lower()
+        if low.startswith(("re:", "fw:", "fwd:")):
+            s = s.lstrip()[s.lstrip().find(":") + 1:]
+        else:
+            return s.strip() or "(thread)"
+
+
 def export(db_path: str) -> dict:
     todos, aware, projects, people = [], [], [], []
     with store.db(db_path) as conn:
@@ -45,11 +55,24 @@ def export(db_path: str) -> dict:
             elif r["board"] in ("awareness", "needs_review"):
                 aware.append({"id": r["email_id"], "t": r["subject"],
                               "s": r["reasoning"], "team": "Inbox", "done": False})
-            elif r["board"] == "project":
-                projects.append({"id": r["email_id"], "t": r["subject"], "team": "Inbox",
-                                 "owner": "You", "s": r["reasoning"], "pct": 10,
-                                 "status": ["proj", "new"], "miles": [["now", "triage"]],
-                                 "tasks": [["o", r["task"] or "follow up"]], "emails": [r["subject"]]})
+        # Projects from real threads: cluster emails by conversationId; a thread with
+        # >= MIN_THREAD messages becomes a project (auto-grouped, deterministic).
+        MIN_THREAD = 3
+        convs = {}
+        for e in conn.execute("SELECT subject, conversation_id, received FROM emails "
+                              "WHERE conversation_id IS NOT NULL AND conversation_id != '' "
+                              "ORDER BY received"):
+            convs.setdefault(e["conversation_id"], []).append(e["subject"] or "(no subject)")
+        for cid, subjects in convs.items():
+            if len(subjects) < MIN_THREAD:
+                continue
+            title = _strip_re(subjects[-1])
+            projects.append({"id": "conv-" + _init(cid) + str(len(subjects)), "t": title, "team": "Inbox",
+                             "owner": "You", "s": f"{len(subjects)} emails in thread",
+                             "pct": min(90, 20 + len(subjects) * 8), "status": ["proj", "active"],
+                             "miles": [["now", "active"]],
+                             "tasks": [["o", "follow up on thread"]],
+                             "emails": list(dict.fromkeys(subjects))[:6]})
 
         now = datetime.now(timezone.utc)
         idx = {}

@@ -6,3 +6,5 @@ __pycache__/
 .env
 .DS_Store
 prototype/data.json
+.token_cache.json
+backend/.token_cache.json

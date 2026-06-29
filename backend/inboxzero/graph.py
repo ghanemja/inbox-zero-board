@@ -15,7 +15,13 @@ from . import store, profiles
 
 
 def _parse(ts: str) -> datetime:
-    d = datetime.fromisoformat(ts)
+    if not ts:
+        return datetime(1970, 1, 1, tzinfo=timezone.utc)
+    ts = ts.strip().replace("Z", "+00:00")   # Graph uses 'Z'; py<3.11 fromisoformat rejects it
+    try:
+        d = datetime.fromisoformat(ts)
+    except ValueError:
+        return datetime(1970, 1, 1, tzinfo=timezone.utc)
     return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
 
 

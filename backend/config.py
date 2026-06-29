@@ -10,6 +10,8 @@ except ImportError:
 AZURE_CLIENT_ID = os.getenv("AZURE_CLIENT_ID", "")
 AZURE_TENANT_ID = os.getenv("AZURE_TENANT_ID", "common")
 GRAPH_SCOPES = ["Mail.Read"]  # read-only by design
+# MSAL token cache on disk → no re-login each run. Holds refresh tokens; gitignored.
+TOKEN_CACHE = os.getenv("TOKEN_CACHE", os.path.join(os.path.dirname(__file__), ".token_cache.json"))
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 GEMMA_MODEL = os.getenv("GEMMA_MODEL", "gemma3:4b")

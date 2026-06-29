@@ -9,6 +9,8 @@ Tables:
 Contacts/playbooks store JSON for now; promote hot fields to columns when query
 patterns settle. See docs/learning-logic.md §1 for the conceptual model.
 """
+from __future__ import annotations
+
 import json
 import sqlite3
 from contextlib import contextmanager
@@ -17,15 +19,16 @@ from config import DB_PATH
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS emails (
-  id            TEXT PRIMARY KEY,
-  from_addr     TEXT,
-  to_addrs      TEXT,      -- json list
-  cc_addrs      TEXT,      -- json list
-  subject       TEXT,
-  body          TEXT,
-  has_unsub     INTEGER,   -- List-Unsubscribe header present
-  is_reply      INTEGER,
-  received      TEXT
+  id              TEXT PRIMARY KEY,
+  from_addr       TEXT,
+  to_addrs        TEXT,      -- json list
+  cc_addrs        TEXT,      -- json list
+  subject         TEXT,
+  body            TEXT,
+  has_unsub       INTEGER,   -- List-Unsubscribe header present
+  is_reply        INTEGER,
+  received        TEXT,
+  conversation_id TEXT       -- Graph conversationId, for thread/project clustering
 );
 CREATE TABLE IF NOT EXISTS classifications (
   email_id      TEXT PRIMARY KEY REFERENCES emails(id),
@@ -91,9 +94,10 @@ def init(path=DB_PATH):
 def upsert_email(conn, e: dict):
     conn.execute(
         """INSERT OR REPLACE INTO emails
-           (id, from_addr, to_addrs, cc_addrs, subject, body, has_unsub, is_reply, received)
-           VALUES (:id,:from_addr,:to_addrs,:cc_addrs,:subject,:body,:has_unsub,:is_reply,:received)""",
-        {**e, "to_addrs": json.dumps(e["to_addrs"]), "cc_addrs": json.dumps(e["cc_addrs"])},
+           (id, from_addr, to_addrs, cc_addrs, subject, body, has_unsub, is_reply, received, conversation_id)
+           VALUES (:id,:from_addr,:to_addrs,:cc_addrs,:subject,:body,:has_unsub,:is_reply,:received,:conversation_id)""",
+        {**e, "to_addrs": json.dumps(e["to_addrs"]), "cc_addrs": json.dumps(e["cc_addrs"]),
+         "conversation_id": e.get("conversation_id", "")},
     )
 
 
