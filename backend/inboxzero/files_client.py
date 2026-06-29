@@ -69,4 +69,7 @@ def fetch_messages(limit: int = 100, since: str | None = None, path: str | None 
     if since:
         out = [e for e in out if e["received"] and e["received"][:10] >= since]
     out.sort(key=lambda e: e["received"], reverse=True)   # newest first
+    if len(out) > limit:
+        print(f"[files] found {len(out)} messages, processing newest {limit}. "
+              f"Raise --limit to do more (e.g. --limit {len(out)}).")
     return out[:limit]
