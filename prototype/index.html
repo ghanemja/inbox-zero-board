@@ -44,7 +44,7 @@
   nav{margin-left:auto;display:flex;gap:4px;background:var(--surface2);padding:4px;border-radius:9px;border:1px solid var(--line)}
   nav button{border:0;background:transparent;color:var(--ink2);font-size:13px;padding:7px 14px;border-radius:7px;cursor:pointer;font-weight:500}
   nav button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06)}
-  main{padding:20px 22px;max-width:1240px;margin:0 auto}
+  main{padding:20px clamp(20px,4vw,56px);max-width:min(1680px,96vw);margin:0 auto}
 
   /* scope filter bar */
   .scopebar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
@@ -143,7 +143,7 @@
   .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
   .panel h3{margin:0 0 4px;font-size:14px;font-weight:600}
   .panel .sub{font-size:12px;color:var(--ink2);margin-bottom:12px}
-  #graph{width:100%;height:360px;display:block;border-radius:8px;background:var(--surface2);cursor:grab}
+  #graph{width:100%;height:clamp(360px,52vh,560px);display:block;border-radius:8px;background:var(--surface2);cursor:grab}
   .legend{display:flex;gap:14px;font-size:12px;color:var(--ink2);margin-top:10px;flex-wrap:wrap}
   .legend i{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:5px}
   .person{display:flex;align-items:center;gap:11px;padding:8px 0;border-bottom:1px solid var(--line)}
@@ -249,7 +249,7 @@
   header nav{margin-left:18px}
   header select{font-size:12px;padding:5px 9px;border-radius:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);margin-left:auto;cursor:pointer}
   header .logout{margin-left:12px}
-  #view-today,#view-commit,#view-delegate{max-width:760px}
+  #view-today,#view-commit,#view-delegate{max-width:920px}
   .viewhead{font-size:13px;color:var(--ink2);margin:0 0 16px}
   .seclabel{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--ink3);margin:20px 2px 10px}
   .teamstrip{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:6px 0 4px}
@@ -1059,11 +1059,13 @@ async function boot(){
     const r=await fetch('data.json',{cache:'no-store'});
     if(r.ok){
       const d=await r.json();
-      if(d.todos&&d.todos.length) todos.splice(0,todos.length,...d.todos);
-      if(d.aware&&d.aware.length) aware.splice(0,aware.length,...d.aware);
-      if(d.projects&&d.projects.length) projects.splice(0,projects.length,...d.projects);
-      if(d.people&&d.people.length){people.splice(0,people.length,...d.people);rebuildPeople();}
-      if(d.commitments&&d.commitments.length) commitments.splice(0,commitments.length,...d.commitments);
+      // REAL mode: a present key fully replaces the demo seed — even when empty —
+      // so demo rows never leak into a real run (e.g. 0 real commitments → none shown).
+      if('todos' in d) todos.splice(0,todos.length,...(d.todos||[]));
+      if('aware' in d) aware.splice(0,aware.length,...(d.aware||[]));
+      if('projects' in d) projects.splice(0,projects.length,...(d.projects||[]));
+      if('people' in d){people.splice(0,people.length,...(d.people||[]));rebuildPeople();}
+      if('commitments' in d) commitments.splice(0,commitments.length,...(d.commitments||[]));
     }
   }catch(e){/* no data.json on static host → keep demo seed */}
   mergeOweTodos();
